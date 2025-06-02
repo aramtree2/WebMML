@@ -15,7 +15,8 @@ let lexer = moo.compile({
     Note: /[a-gA-G][\+\-]?(?:0|[1-9][0-9]{0,2})?\.?/,
     AbsNote: /[Nn](?:0|[1-9][0-9]{0,2})/,
     Rest: /[Rr](?:0|[1-9][0-9]{0,2})?\.?/,
-    tie: /&/,
+    Tie: /&/,
+    Error: moo.error,
 })
 
 submit.addEventListener("click",()=>{
@@ -29,7 +30,13 @@ function parse()
     var token = lexer.next();
     while(token != null)
     {
-        console.log(token);
+        if(token.type == "Error")
+        {
+            mml.focus();
+            mml.setSelectionRange(token.offset, token.offset + 1);
+            result.innerText += `[${token.type}] "${token.value[0]}" at offset ${token.offset}, line ${token.line}, column ${token.col}`;
+            break;
+        }
         result.innerText += `Type : ${token.type} , Value : ${token.value}`;
         result.innerText += "\n";
         var token = lexer.next();
