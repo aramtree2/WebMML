@@ -20,25 +20,31 @@ let lexer = moo.compile({
 })
 
 submit.addEventListener("click",()=>{
-    parse();
+    Parse();
 })
 
-function parse()
+function Parse()
 {
     lexer.reset(mml.value);
-    result.innerText = "MML Parse Reult \n"
-    var token = lexer.next();
-    while(token != null)
+    result.value = "MML Parse Reult \n"
+    function ParseStep()
     {
+        result.scrollTop = result.scrollHeight;
+        var token = lexer.next();
+        if (!token) return;
         if(token.type == "Error")
         {
+            console.log("error");
             mml.focus();
             mml.setSelectionRange(token.offset, token.offset + 1);
-            result.innerText += `[${token.type}] "${token.value[0]}" at offset ${token.offset}, line ${token.line}, column ${token.col}`;
-            break;
+            result.value += `[${token.type}] "${token.value[0]}" at offset ${token.offset}, line ${token.line}, column ${token.col}`;
+            return;
         }
-        result.innerText += `Type : ${token.type} , Value : ${token.value}`;
-        result.innerText += "\n";
-        var token = lexer.next();
+        result.value += `Type : ${token.type} , Value : ${token.value}`;
+        result.value += "\n";
+
+        requestAnimationFrame(ParseStep);
     }
+    
+    requestAnimationFrame(ParseStep);
 }
