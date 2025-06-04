@@ -1,6 +1,6 @@
 import moo from 'https://cdn.skypack.dev/moo';
 
-var mml = document.getElementById("mml");
+var mml = document.getElementById("RawMML");
 var result = document.getElementById("LexResult");
 var submit = document.getElementById("submit");
 

@@ -1,0 +1,43 @@
+html{
+    width: 100%;
+    height: 100%;
+}
+body {
+    background-color: gray;
+    width: 100%;
+    height: 100%;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 1fr 2fr 2fr;
+    grid-template-rows: 1fr 5fr 3fr;
+    gap: 5px 5px;
+    grid-auto-flow: row;
+    grid-template-areas:
+        "Menu Menu Menu"
+        "Instruments PianoRoll PianoSheet"
+        "MML VirtualPiano Toolbar";
+    padding: 5px;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.container div {
+    background-color: white;
+}
+
+.Menu { grid-area: Menu; }
+
+.MML { grid-area: MML; }
+
+.Instruments { grid-area: Instruments; }
+
+.PianoRoll { grid-area: PianoRoll; }
+
+.PianoSheet { grid-area: PianoSheet; }
+
+.VirtualPiano { grid-area: VirtualPiano; }
+
+.Toolbar { grid-area: Toolbar; }

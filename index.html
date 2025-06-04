@@ -2,12 +2,29 @@
 <html>
     <head>
         <script src="main.js" type="module"></script>
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/reset-css@4.0.1/reset.min.css"
+        />
+        <link rel="stylesheet" href="style.css">
     </head>
     <body>
-        <textarea id="mml" scroll style="resize:none; width: 400px; height: 200px;" placeholder="type mml code here"></textarea>
-        <br>
-        <button id="submit">submit</button>
-        <br>
-        <textarea id="LexResult" scroll readonly style="resize:none;width: 400px; height: 200px;"></textarea>
+        <div class="container">
+            <div class="Menu">
+                Web MML
+            </div>
+            <div class="MML">
+                <textarea id="RawMML" scroll placeholder="type mml code here" style="resize:none; width: 95%; height: 40%;"></textarea>
+                <br>
+                <button id="submit">submit</button>
+                <br>
+                <textarea id="LexResult" scroll readonly style="resize:none; width: 95%; height: 40%;"></textarea>
+            </div>
+            <div class="Instruments"></div>
+            <div class="PianoRoll"></div>
+            <div class="PianoSheet"></div>
+            <div class="VirtualPiano"></div>
+            <div class="Toolbar"></div>
+        </div>
     </body>
 </html>
