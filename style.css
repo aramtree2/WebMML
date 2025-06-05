@@ -11,7 +11,7 @@ body {
 .container {
     display: grid;
     grid-template-columns: 1fr 2fr 2fr;
-    grid-template-rows: 1fr 5fr 3fr;
+    grid-template-rows: 0.5fr 5fr 3fr;
     gap: 5px 5px;
     grid-auto-flow: row;
     grid-template-areas:
@@ -24,7 +24,7 @@ body {
     box-sizing: border-box;
 }
 
-.container div {
+.container > div {
     background-color: white;
 }
 
@@ -38,6 +38,38 @@ body {
 
 .PianoSheet { grid-area: PianoSheet; }
 
-.VirtualPiano { grid-area: VirtualPiano; }
+.VirtualPiano {
+    grid-area: VirtualPiano;
+    display: grid;
+    grid-template-rows: 1fr 5fr;
+    grid-template-areas:
+        "Octave"
+        "Keys";
+}
+
+.Octave {
+    grid-area: "Octave";
+    
+    display: grid;
+    grid-template-columns: 0.8fr 4fr 0.8fr;
+    grid-template-areas:
+        "OctaveDown OctaveView OctaveUp";
+}
+.OctaveDown {
+    grid-area: "OctaveDown";
+}
+
+.OctaveView {
+    grid-area: "OctaveView";
+}
+
+.OctaveUp {
+    grid-area: "OctaveUp";
+}
+
+
+.Keys {
+    grid-area: "Keys";
+}
 
 .Toolbar { grid-area: Toolbar; }
