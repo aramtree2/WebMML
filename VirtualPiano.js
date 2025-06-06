@@ -1,3 +1,6 @@
+// === Sound Settings ===
+let sustainTime = 0.5;
+
 // === Octave Section ===
 const octavecanvas = document.getElementById("OctavePiano");
 const octx = octavecanvas.getContext("2d");
@@ -46,6 +49,7 @@ const keyToBlackIndex = {
 // === Input State ===
 const pressedByMouse = new Set();
 const pressedByKeyboard = new Set();
+const activeSources = new Map();
 let lastMouseKey = null;
 let isMouseDown = false;
 
@@ -95,7 +99,7 @@ function drawOctave() {
     octx.fillText("▶  RShift", octavecanvas.width - octavechangeKeyWidth / 2, octavecanvas.height / 2);
 }
 
-// === Audio Setup ===
+// === Audio ===
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 const audioBuffers = new Map();
 
@@ -109,28 +113,44 @@ async function loadAllSamples() {
     }
 }
 
-function playNote(index) {
+function playNote(index, key) {
     const buffer = audioBuffers.get(index);
     if (!buffer) return;
     const source = audioContext.createBufferSource();
+    const gainNode = audioContext.createGain();
+    gainNode.gain.setValueAtTime(1, audioContext.currentTime);
     source.buffer = buffer;
-    source.connect(audioContext.destination);
+    source.connect(gainNode).connect(audioContext.destination);
     source.start();
+    activeSources.set(key, { source, gainNode });
 }
 
-// === Keyboard Input ===
+function stopNote(key) {
+    const node = activeSources.get(key);
+    if (node) {
+        try {
+            node.gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + sustainTime);
+            node.source.stop(audioContext.currentTime + sustainTime);
+        } catch (e) {}
+        activeSources.delete(key);
+    }
+}
+
+// === Update Keyboard Input ===
 window.addEventListener("keydown", (e) => {
     if (e.repeat) return;
     if (keyToWhiteIndex.hasOwnProperty(e.code)) {
         const i = keyToWhiteIndex[e.code];
-        pressedByKeyboard.add(`w${i}`);
-        playNote(OctaveSelectedIndex * 12 + whiteKeyNoteOffsets[i]);
+        const key = `w${i}`;
+        pressedByKeyboard.add(key);
+        playNote(OctaveSelectedIndex * 12 + whiteKeyNoteOffsets[i], key);
         drawKeys();
     }
     if (keyToBlackIndex.hasOwnProperty(e.code)) {
         const i = keyToBlackIndex[e.code];
-        pressedByKeyboard.add(`b${i}`);
-        playNote(OctaveSelectedIndex * 12 + blackKeyNoteOffsets[i]);
+        const key = `b${i}`;
+        pressedByKeyboard.add(key);
+        playNote(OctaveSelectedIndex * 12 + blackKeyNoteOffsets[i], key);
         drawKeys();
     }
     if (e.code === "ShiftLeft") {
@@ -147,32 +167,48 @@ window.addEventListener("keydown", (e) => {
 
 window.addEventListener("keyup", (e) => {
     if (keyToWhiteIndex.hasOwnProperty(e.code)) {
-        pressedByKeyboard.delete(`w${keyToWhiteIndex[e.code]}`);
+        const i = keyToWhiteIndex[e.code];
+        const key = `w${i}`;
+        pressedByKeyboard.delete(key);
+        stopNote(key);
         drawKeys();
     }
     if (keyToBlackIndex.hasOwnProperty(e.code)) {
-        pressedByKeyboard.delete(`b${keyToBlackIndex[e.code]}`);
+        const i = keyToBlackIndex[e.code];
+        const key = `b${i}`;
+        pressedByKeyboard.delete(key);
+        stopNote(key);
         drawKeys();
     }
 });
+
 
 // === Mouse Input ===
 canvas.addEventListener("mousedown", (e) => {
     isMouseDown = true;
     handleMouseInput(e.offsetX, e.offsetY);
 });
+
 canvas.addEventListener("mousemove", (e) => {
     if (isMouseDown) handleMouseInput(e.offsetX, e.offsetY);
 });
+
 canvas.addEventListener("mouseup", () => {
     isMouseDown = false;
-    if (lastMouseKey) pressedByMouse.delete(lastMouseKey);
+    if (lastMouseKey) {
+        pressedByMouse.delete(lastMouseKey);
+        stopNote(lastMouseKey);
+    }
     lastMouseKey = null;
     drawKeys();
 });
+
 canvas.addEventListener("mouseleave", () => {
     isMouseDown = false;
-    if (lastMouseKey) pressedByMouse.delete(lastMouseKey);
+    if (lastMouseKey) {
+        pressedByMouse.delete(lastMouseKey);
+        stopNote(lastMouseKey);
+    }
     lastMouseKey = null;
     drawKeys();
 });
@@ -183,10 +219,13 @@ function handleMouseInput(x, y) {
         const bx = blackKeyOffsets[i] * whiteKeyWidth - blackKeyWidth / 2;
         if (x >= bx && x <= bx + blackKeyWidth && y <= blackKeyHeight) {
             const key = `b${i}`;
-            if (lastMouseKey && lastMouseKey !== key) pressedByMouse.delete(lastMouseKey);
+            if (lastMouseKey && lastMouseKey !== key) {
+                pressedByMouse.delete(lastMouseKey);
+                stopNote(lastMouseKey);
+            }
             if (lastMouseKey !== key) {
                 pressedByMouse.add(key);
-                playNote(OctaveSelectedIndex * 12 + blackKeyNoteOffsets[i]);
+                playNote(OctaveSelectedIndex * 12 + blackKeyNoteOffsets[i], key);
             }
             lastMouseKey = key;
             drawKeys();
@@ -196,15 +235,24 @@ function handleMouseInput(x, y) {
     const i = Math.floor(x / whiteKeyWidth);
     if (i >= 0 && i < whiteKeys.length) {
         const key = `w${i}`;
-        if (lastMouseKey && lastMouseKey !== key) pressedByMouse.delete(lastMouseKey);
+        if (lastMouseKey && lastMouseKey !== key) {
+            pressedByMouse.delete(lastMouseKey);
+            stopNote(lastMouseKey);
+        }
         if (lastMouseKey !== key) {
             pressedByMouse.add(key);
-            playNote(OctaveSelectedIndex * 12 + whiteKeyNoteOffsets[i]);
+            playNote(OctaveSelectedIndex * 12 + whiteKeyNoteOffsets[i], key);
         }
         lastMouseKey = key;
         drawKeys();
     }
 }
+
+window.addEventListener("blur", () => {
+    pressedByKeyboard.forEach(stopNote);
+    pressedByKeyboard.clear();
+    drawKeys();
+});
 
 function drawKeys() {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -250,11 +298,6 @@ octavecanvas.addEventListener("click", (e) => {
         OctaveSelectedIndex = index;
     }
     drawOctave();
-});
-
-window.addEventListener("blur", () => {
-    pressedByKeyboard.clear();
-    drawKeys();
 });
 
 loadAllSamples();
