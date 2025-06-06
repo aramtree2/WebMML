@@ -24,75 +24,13 @@
             <div class="PianoRoll"></div>
             <div class="PianoSheet"></div>
             <div class="VirtualPiano">
+                <script src="VirtualPiano.js" type="module"></script>
                 <div class="Octave">
                     <div class="OctaveDown">
                         <button id="OctaveDown" style="width: 100%; height: 100%;">LShift &lt;</button>
                     </div>
                     <div class="OctaveView">
                         <canvas id="OctavePiano" width="542px" height="54px"></canvas>
-                        <script>
-                            const octavecanvas = document.getElementById("OctavePiano");
-                            const octx = octavecanvas.getContext("2d");
-
-                            // ---------------------------
-                            // 건반 기본 설정
-                            // ---------------------------
-                            const octavenumWhiteKeys = 56;
-                            const octavewhiteKeyWidth = octavecanvas.width / octavenumWhiteKeys;
-                            const octavewhiteKeyHeight = octavecanvas.height * 0.7;
-                            const octaveblackKeyWidth = octavewhiteKeyWidth * 0.6;
-                            const octaveblackKeyHeight = octavewhiteKeyHeight * 0.6;
-
-                            // ---------------------------
-                            // 옥타브 영역 설정 (F1~F8)
-                            // ---------------------------
-                            const OctaveLabelHeight = octavecanvas.height * 0.3;
-                            const OctaveCount = 8;
-                            const OctaveWhiteKeys = octavenumWhiteKeys / OctaveCount;
-                            const OctaveSelectedIndex = 3; // F3
-                            const OctaveSelectedStart = OctaveSelectedIndex * OctaveWhiteKeys;
-                            const OctaveSelectedEnd = OctaveSelectedStart + (2 *OctaveWhiteKeys) - 1;
-
-                            // ---------------------------
-                            // 흰 건반 그리기
-                            // ---------------------------
-                            for (let i = 0; i < octavenumWhiteKeys; i++) {
-                            const x = i * octavewhiteKeyWidth;
-
-                            octx.fillStyle = (i >= OctaveSelectedStart && i <= OctaveSelectedEnd) ? "#ffffff" : "#888888";
-                            octx.fillRect(x, 0, octavewhiteKeyWidth, octavewhiteKeyHeight);
-                            octx.strokeRect(x, 0, octavewhiteKeyWidth, octavewhiteKeyHeight);
-                            }
-
-                            // ---------------------------
-                            // 검은 건반 그리기
-                            // ---------------------------
-                            const blackKeyPattern = [1, 1, 0, 1, 1, 1, 0]; // C#, D#, -, F#, G#, A#, -
-                            for (let i = 0; i < octavenumWhiteKeys - 1; i++) {
-                            const step = i % 7;
-                            if (blackKeyPattern[step] === 1) {
-                                const x = (i + 1) * octavewhiteKeyWidth - octaveblackKeyWidth / 2;
-                                octx.fillStyle = "#000";
-                                octx.fillRect(x, 0, octaveblackKeyWidth, octaveblackKeyHeight);
-                            }
-                            }
-
-                            // ---------------------------
-                            // 옥타브 라벨 그리기 (F1 ~ F8)
-                            // ---------------------------
-                            for (let i = 0; i < OctaveCount; i++) {
-                            const x = i * OctaveWhiteKeys * octavewhiteKeyWidth;
-                            octx.fillStyle = (i === OctaveSelectedIndex | i-1 === OctaveSelectedIndex) ? "#ffffff" : "#555555";
-                            octx.fillRect(x, octavewhiteKeyHeight, OctaveWhiteKeys * octavewhiteKeyWidth, OctaveLabelHeight);
-                            octx.strokeRect(x, octavewhiteKeyHeight, OctaveWhiteKeys * octavewhiteKeyWidth, OctaveLabelHeight);
-
-                            octx.fillStyle = "#000";
-                            octx.font = `${octavewhiteKeyWidth * 1.2}px Arial`;
-                            octx.textAlign = "center";
-                            octx.textBaseline = "middle";
-                            octx.fillText("F" + (i + 1), x + (OctaveWhiteKeys * octavewhiteKeyWidth) / 2, octavewhiteKeyHeight + OctaveLabelHeight / 2);
-                            }
-                        </script>
                     </div>
                     <div class="OctaveUp">
                         <button id="OctaveUp" style="width: 100%; height: 100%;">&gt; LShift</button>
@@ -100,45 +38,6 @@
                 </div>
                 <div class="Keys">
                     <canvas id="piano" width="760px" height="270px"></canvas>
-                    <script>
-                        const canvas = document.getElementById("piano");
-                        const ctx = canvas.getContext("2d");
-
-                        const numWhiteKeys = 14;
-                        const canvasWidth = canvas.width;
-                        const canvasHeight = canvas.height;
-
-                        const whiteKeyWidth = canvasWidth / numWhiteKeys;
-                        const whiteKeyHeight = canvasHeight;
-                        const blackKeyWidth = whiteKeyWidth * 0.6;
-                        const blackKeyHeight = whiteKeyHeight * 0.55;
-
-                        const whiteKeys = ['Z','X','C','V','B','N','M','Y','U','I','O','P','[',']'];
-                        const blackKeys = ['S','D','','G','H','J','','7','8','','0','-','='];
-
-                        // Draw white keys
-                        for (let i = 0; i < whiteKeys.length; i++) {
-                        const x = i * whiteKeyWidth;
-                        ctx.fillStyle = "#fff";
-                        ctx.fillRect(x, 0, whiteKeyWidth, whiteKeyHeight);
-                        ctx.strokeRect(x, 0, whiteKeyWidth, whiteKeyHeight);
-                        ctx.fillStyle = "#000";
-                        ctx.font = "14px Arial";
-                        ctx.fillText(whiteKeys[i], x + 12, 170);
-                        }
-
-                        // Draw black keys
-                        const blackKeyOffsets = [1, 2, null, 4, 5, 6, null, 8, 9, null, 11, 12, 13]; // relative to white keys
-                        for (let i = 0; i < blackKeys.length; i++) {
-                        if (blackKeys[i] === '' || blackKeyOffsets[i] == null) continue;
-                        const x = blackKeyOffsets[i] * whiteKeyWidth - blackKeyWidth / 2;
-                        ctx.fillStyle = "#000";
-                        ctx.fillRect(x, 0, blackKeyWidth, blackKeyHeight);
-                        ctx.fillStyle = "#fff";
-                        ctx.font = "12px Arial";
-                        ctx.fillText(blackKeys[i], x + 6, 20);
-                        }
-                    </script>
                 </div>
             </div>
             <div class="Toolbar"></div>
