@@ -1,11 +1,10 @@
 // === Octave Section ===
-const OctaveDownbutton = document.getElementById("OctaveDown");
-const OctaveUpbutton = document.getElementById("OctaveUp");
 const octavecanvas = document.getElementById("OctavePiano");
 const octx = octavecanvas.getContext("2d");
 
 const octavenumWhiteKeys = 56;
-const octavewhiteKeyWidth = octavecanvas.width / octavenumWhiteKeys;
+const octavechangeKeyWidth = octavecanvas.width * 0.13;
+const octavewhiteKeyWidth = (octavecanvas.width - 2 * octavechangeKeyWidth) / octavenumWhiteKeys;
 const octavewhiteKeyHeight = octavecanvas.height * 0.7;
 const octaveblackKeyWidth = octavewhiteKeyWidth * 0.6;
 const octaveblackKeyHeight = octavewhiteKeyHeight * 0.6;
@@ -36,7 +35,7 @@ const blackKeyOffsets = [1, 2, null, 4, 5, 6, null, 8, 9, null, 11, 12, 13];
 const pressedByMouse = new Set();
 const pressedByKeyboard = new Set();
 
-let lastMouseKey = null; // e.g. 'w3' or 'b5'
+let lastMouseKey = null;
 let isMouseDown = false;
 
 // === Octave Drawing ===
@@ -47,7 +46,7 @@ function drawOctave() {
     octx.clearRect(0, 0, octavecanvas.width, octavecanvas.height);
 
     for (let i = 0; i < octavenumWhiteKeys; i++) {
-        const x = i * octavewhiteKeyWidth;
+        const x = i * octavewhiteKeyWidth + octavechangeKeyWidth;
         octx.fillStyle = (i >= OctaveSelectedStart && i <= OctaveSelectedEnd) ? "#ffffff" : "#888888";
         octx.fillRect(x, 0, octavewhiteKeyWidth, octavewhiteKeyHeight);
         octx.strokeRect(x, 0, octavewhiteKeyWidth, octavewhiteKeyHeight);
@@ -57,14 +56,14 @@ function drawOctave() {
     for (let i = 0; i < octavenumWhiteKeys - 1; i++) {
         const step = i % 7;
         if (blackKeyPattern[step]) {
-            const x = (i + 1) * octavewhiteKeyWidth - octaveblackKeyWidth / 2;
+            const x = octavechangeKeyWidth + (i + 1) * octavewhiteKeyWidth - octaveblackKeyWidth / 2;
             octx.fillStyle = "#000";
             octx.fillRect(x, 0, octaveblackKeyWidth, octaveblackKeyHeight);
         }
     }
 
     for (let i = 0; i < OctaveCount; i++) {
-        const x = i * OctaveWhiteKeys * octavewhiteKeyWidth;
+        const x = i * OctaveWhiteKeys * octavewhiteKeyWidth + octavechangeKeyWidth;
         octx.fillStyle = (i === OctaveSelectedIndex || i - 1 === OctaveSelectedIndex) ? "#ffffff" : "#555555";
         octx.fillRect(x, octavewhiteKeyHeight, OctaveWhiteKeys * octavewhiteKeyWidth, OctaveLabelHeight);
         octx.strokeRect(x, octavewhiteKeyHeight, OctaveWhiteKeys * octavewhiteKeyWidth, OctaveLabelHeight);
@@ -74,7 +73,41 @@ function drawOctave() {
         octx.textBaseline = "middle";
         octx.fillText("F" + (i + 1), x + (OctaveWhiteKeys * octavewhiteKeyWidth) / 2, octavewhiteKeyHeight + OctaveLabelHeight / 2);
     }
+
+    // Left arrow
+    octx.fillStyle = "#ffffff";
+    octx.fillRect(0, 0, octavechangeKeyWidth, octavecanvas.height);
+    octx.strokeRect(0, 0, octavechangeKeyWidth, octavecanvas.height);
+    octx.fillStyle = "#000";
+    octx.fillText("LShift  ◀", octavechangeKeyWidth / 2, octavecanvas.height / 2);
+
+    // Right arrow
+    octx.fillStyle = "#ffffff";
+    octx.fillRect(octavecanvas.width - octavechangeKeyWidth, 0, octavechangeKeyWidth, octavecanvas.height);
+    octx.strokeRect(octavecanvas.width - octavechangeKeyWidth, 0, octavechangeKeyWidth, octavecanvas.height);
+    octx.fillStyle = "#000";
+    octx.fillText("▶  RShift", octavecanvas.width - octavechangeKeyWidth / 2, octavecanvas.height / 2);
 }
+
+// === Octave Click Handling ===
+octavecanvas.addEventListener("click", (e) => {
+    const mouseX = e.offsetX;
+    const leftBoundary = octavechangeKeyWidth;
+    const rightBoundary = octavecanvas.width - octavechangeKeyWidth;
+
+    if (mouseX < leftBoundary) {
+        OctaveSelectedIndex = Math.max(0, OctaveSelectedIndex - 1);
+    } else if (mouseX > rightBoundary) {
+        OctaveSelectedIndex = Math.min(6, OctaveSelectedIndex + 1);
+    } else {
+        const usableWidth = octavecanvas.width - 2 * octavechangeKeyWidth;
+        const scale = octavenumWhiteKeys / usableWidth;
+        const relativeX = (mouseX - octavechangeKeyWidth) * scale;
+        const index = Math.min(6, Math.floor(relativeX / OctaveWhiteKeys));
+        OctaveSelectedIndex = index;
+    }
+    drawOctave();
+});
 
 // === Piano Drawing ===
 function drawKeys() {
@@ -185,24 +218,6 @@ window.addEventListener("keyup", (e) => {
         pressedByKeyboard.delete(`b${keyToBlackIndex[e.code]}`);
         drawKeys();
     }
-});
-
-// === Octave Click ===
-octavecanvas.addEventListener("click", (e) => {
-    const mouseX = e.offsetX;
-    const index = Math.min(6, Math.floor(mouseX / (OctaveWhiteKeys * octavewhiteKeyWidth)));
-    OctaveSelectedIndex = index;
-    drawOctave();
-});
-
-OctaveDownbutton.addEventListener("click", () => {
-    OctaveSelectedIndex = Math.max(0, OctaveSelectedIndex - 1);
-    drawOctave();
-});
-
-OctaveUpbutton.addEventListener("click", () => {
-    OctaveSelectedIndex = Math.min(6, OctaveSelectedIndex + 1);
-    drawOctave();
 });
 
 drawOctave();
