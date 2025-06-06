@@ -154,12 +154,10 @@ window.addEventListener("keydown", (e) => {
         drawKeys();
     }
     if (e.code === "ShiftLeft") {
-        e.preventDefault();
         OctaveSelectedIndex = Math.max(0, OctaveSelectedIndex - 1);
         drawOctave();
     }
     if (e.code === "ShiftRight") {
-        e.preventDefault();
         OctaveSelectedIndex = Math.min(6, OctaveSelectedIndex + 1);
         drawOctave();
     }
