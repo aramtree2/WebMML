@@ -41,35 +41,22 @@ body {
 .VirtualPiano {
     grid-area: VirtualPiano;
     display: grid;
-    grid-template-rows: 1fr 5fr;
+    grid-template-rows: 1fr 5fr 1fr;
     grid-template-areas:
         "Octave"
-        "Keys";
+        "Keys"
+        "VolumeSustain";
 }
 
 .Octave {
     grid-area: "Octave";
-    
-    display: grid;
-    grid-template-columns: 0.8fr 4fr 0.8fr;
-    grid-template-areas:
-        "OctaveDown OctaveView OctaveUp";
 }
-.OctaveDown {
-    grid-area: "OctaveDown";
-}
-
-.OctaveView {
-    grid-area: "OctaveView";
-}
-
-.OctaveUp {
-    grid-area: "OctaveUp";
-}
-
 
 .Keys {
     grid-area: "Keys";
+}
+.VolumeSustain {
+    grid-area: "VolumeSustain";
 }
 
 .Toolbar { grid-area: Toolbar; }
