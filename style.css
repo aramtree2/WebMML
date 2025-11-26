@@ -30,7 +30,18 @@ body {
 
 .Menu { grid-area: Menu; }
 
-.MML { grid-area: MML; }
+.MML {
+    grid-area: MML;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;      /* 가운데 정렬 싫으면 빼도 됨 */
+    padding: 5px;
+    box-sizing: border-box;
+
+    overflow: hidden;         /* 안쪽 내용은 잘리고, 자식이 스크롤 담당 */
+    min-height: 0;            /* grid 안 flex 아이템이 줄어들 수 있게 */
+}
 
 .Instruments { grid-area: Instruments; }
 
@@ -49,14 +60,155 @@ body {
 }
 
 .Octave {
-    grid-area: "Octave";
+    grid-area: Octave;
 }
 
 .Keys {
-    grid-area: "Keys";
+    grid-area: Keys;
 }
+
 .VolumeSustain {
-    grid-area: "VolumeSustain";
+    grid-area: VolumeSustain;
 }
 
 .Toolbar { grid-area: Toolbar; }
+
+/* ==== MML Token Cell View ==== */
+
+.cell-container {
+    width: 95%;
+    /* height: 40%;  ← 이 줄 지우기 */
+    height: 160px;            /* 원하는 값으로, 예: 160px 정도 */
+    margin-top: 8px;
+    padding: 6px;
+    box-sizing: border-box;
+
+    border: 1px solid #666;
+    border-radius: 4px;
+    background: #111;
+
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 4px;
+
+    overflow: auto;           /* 셀이 많아지면 이 영역 안에서만 스크롤 */
+    font-family: monospace;
+}
+
+.cell {
+    padding: 4px 6px;
+    box-sizing: border-box;
+
+    border-radius: 4px;
+    border: 1px solid #444;
+    background: #1e1e1e;
+    color: #eee;
+
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+}
+
+.cell:hover {
+    background: #333;
+    border-color: #888;
+}
+
+.cell-type {
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+.cell-value {
+    font-size: 12px;
+    margin-top: 2px;
+    word-break: break-all;
+}
+
+.cell.selected {
+    border-color: #ffd54f;
+    background: #554000;
+}
+
+.cell-input {
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+}
+
+.mml-token-highlight {
+    font-weight: bold;
+    background: rgba(255, 255, 0, 0.2);
+}
+
+.cell-error {
+    border-color: #ff5555;
+    background: #330000;
+    color: #ffbbbb;
+}
+
+.mml-token-error {
+    background: rgba(255, 80, 80, 0.35);
+    color: #fff;
+    font-weight: bold;
+}
+
+.cell-insert {
+    border-style: dashed;
+    opacity: 0.9;
+}
+
+.cell-container {
+    width: 95%;
+    height: 40%;
+    margin-top: 8px;
+    padding: 6px;
+    box-sizing: border-box;
+
+    border: 1px solid #666;
+    border-radius: 4px;
+    background: #111;
+
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 4px;
+
+    /* 🔥 각 행 기본 높이 줄이기 */
+    grid-auto-rows: minmax(28px, auto);
+
+    overflow: auto;
+    font-family: monospace;
+}
+
+.cell {
+    padding: 2px 4px;              /* 🔽 세로 padding 줄임 */
+    box-sizing: border-box;
+
+    border-radius: 4px;
+    border: 1px solid #444;
+    background: #1e1e1e;
+    color: #eee;
+
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+
+    display: flex;                 /* 🔥 위/아래 텍스트를 빽빽하게 */
+    flex-direction: column;
+    justify-content: center;
+}
+
+.cell-type {
+    font-size: 9px;
+    opacity: 0.7;
+    line-height: 1.1;
+}
+
+.cell-value {
+    font-size: 11px;
+    margin-top: 1px;
+    word-break: break-all;
+    line-height: 1.1;
+}

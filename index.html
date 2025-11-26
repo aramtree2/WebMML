@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/loader.min.js"></script>
         <script src="MMLParser.js" type="module"></script>
         <link
             rel="stylesheet"
@@ -14,11 +15,17 @@
                 Web MML
             </div>
             <div class="MML">
-                <textarea id="RawMML" scroll placeholder="type mml code here" style="resize:none; width: 95%; height: 40%;"></textarea>
+                <div id="RawMMLEditor" style="width: 95%; height: 40%;"></div>
                 <br>
                 <button id="submit">submit</button>
                 <br>
-                <textarea id="LexResult" scroll readonly style="resize:none; width: 95%; height: 40%;"></textarea>
+                <div id="CellContainer" class="cell-container"></div>
+                <div class="cell-toolbar">
+                    <button id="cellDeleteBtn" class="cell-toolbar-btn">삭제</button>
+                    <button id="cellEditBtn"   class="cell-toolbar-btn">편집</button>
+                    <button id="cellInsertBtn" class="cell-toolbar-btn">추가</button>
+                    <button id="cellUndoBtn"   class="cell-toolbar-btn">되돌리기</button>
+                </div>
             </div>
             <div class="Instruments"></div>
             <div class="PianoRoll"></div>
