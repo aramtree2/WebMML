@@ -175,7 +175,7 @@ body,
 }
 
 .drop-preview.center {
-  inset: 18%;
+  inset: 0;
 }
 
 .drop-preview.left {

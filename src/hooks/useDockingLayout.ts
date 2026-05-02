@@ -13,9 +13,11 @@ import { getDropDirection } from "../utils/dropPosition";
 import {
     cloneNode,
     countPanels,
+    findPanelSnapshot,
     insertPanel,
     removePanel,
     resizeSplitAtPath,
+    restorePanelBySnapshot,
     setActivePanel,
     splitPanelBySelf,
     wrapLayoutByEdge,
@@ -33,6 +35,8 @@ export function useDockingLayout(initialState: EditorLayoutState) {
     const detachPanel = (panelId: string) => {
         if (countPanels(mainLayout) <= 1) return;
 
+        const previousDock = findPanelSnapshot(mainLayout, panelId);
+
         setMainLayout((prev) => removePanel(prev, panelId) ?? prev);
 
         setFloating((prev) => [
@@ -46,23 +50,30 @@ export function useDockingLayout(initialState: EditorLayoutState) {
                 height: 280,
                 maximized: false,
                 layout: { type: "tabs", ids: [panelId], activeId: panelId },
+                previousDock,
             },
         ]);
     };
 
     const restorePanel = (panelId: string, windowId: string) => {
+        const targetWindow = floating.find((win) => win.id === windowId);
+        const previousDock = targetWindow?.previousDock;
+        const incoming: LayoutNode = { type: "tabs", ids: [panelId], activeId: panelId };
+
         setFloating((prev) =>
             prev
                 .map((win) => ({ ...win, layout: removePanel(win.layout, panelId) }))
                 .filter((win) => win.layout !== null) as FloatingWindow[]
         );
 
-        setMainLayout((prev) => ({
-            type: "split",
-            direction: "row",
-            children: [prev, { type: "tabs", ids: [panelId], activeId: panelId }],
-            sizes: [75, 25],
-        }));
+        setMainLayout((prev) => {
+            if (previousDock) {
+                const restored = restorePanelBySnapshot(prev, incoming, previousDock);
+                if (restored) return restored;
+            }
+
+            return wrapLayoutByEdge(prev, incoming, "right");
+        });
     };
 
     const handleSelectTab = (panelId: string, windowId: string | "main") => {

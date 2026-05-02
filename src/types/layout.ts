@@ -3,6 +3,15 @@ import type React from "react";
 export type Direction = "left" | "right" | "top" | "bottom" | "center";
 export type EdgeDirection = "left" | "right" | "top" | "bottom";
 
+export type DockSnapshot = {
+    parentPath: number[];
+    childIndex: number;
+    tabIndex?: number;
+    parentDirection?: "row" | "column";
+    beforePanelId?: string;
+    afterPanelId?: string;
+};
+
 export type LayoutNode =
     | { type: "tabs"; ids: string[]; activeId: string }
     | {
@@ -21,6 +30,7 @@ export type FloatingWindow = {
     height: number;
     maximized: boolean;
     layout: LayoutNode;
+    previousDock?: DockSnapshot;
 };
 
 export type DragInfo = {

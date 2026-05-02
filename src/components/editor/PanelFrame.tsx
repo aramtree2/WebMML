@@ -37,6 +37,19 @@ export function PanelFrame({
 }: PanelFrameProps) {
     const currentActiveId = activeId || ids[0];
     const canDrag = isFloating || windowId !== "main" || mainPanelCount > 1;
+    const canDetach = !isFloating && mainPanelCount > 1;
+    const canRestore = isFloating && windowId !== "main";
+
+    const handleTabDoubleClick = (id: string) => {
+        if (canRestore) {
+            onRestore(id, windowId);
+            return;
+        }
+
+        if (canDetach) {
+            onDetach(id);
+        }
+    };
 
     return (
         <div className="panel-frame">
@@ -46,7 +59,9 @@ export function PanelFrame({
                         key={id}
                         className={`tab ${id === currentActiveId ? "active" : ""}`}
                         draggable={canDrag}
+                        title={isFloating ? "탭을 더블클릭하면 되돌리기" : "탭을 더블클릭하면 분리"}
                         onClick={() => onSelectTab(id, windowId)}
+                        onDoubleClick={() => handleTabDoubleClick(id)}
                         onDragStart={(e) => {
                             if (!canDrag) {
                                 e.preventDefault();
@@ -73,16 +88,6 @@ export function PanelFrame({
                 {dragInfo && dropPreview?.targetId === currentActiveId && (
                     <div className={`drop-preview ${dropPreview.direction}`} />
                 )}
-
-                <div className="panel-toolbar">
-                    {!isFloating && mainPanelCount > 1 && (
-                        <button onClick={() => onDetach(currentActiveId)}>분리</button>
-                    )}
-
-                    {isFloating && (
-                        <button onClick={() => onRestore(currentActiveId, windowId)}>되돌리기</button>
-                    )}
-                </div>
 
                 {renderPanel(currentActiveId)}
             </div>

@@ -5,9 +5,24 @@ import type {
     EdgePreview,
     FloatingWindow,
     DropPreview,
+    LayoutNode,
 } from "../../types/layout";
 import { getTargetEdgePreview } from "../../utils/dropPosition";
 import { LayoutView } from "./LayoutView";
+
+function getActivePanelId(node: LayoutNode): string | null {
+    if (node.type === "tabs") {
+        return node.activeId;
+    }
+
+    for (const child of node.children) {
+        const found = getActivePanelId(child);
+        if (found) return found;
+    }
+
+    return null;
+}
+
 
 type FloatingWindowViewProps = {
     win: FloatingWindow;
@@ -144,7 +159,7 @@ export function FloatingWindowView({
             }
         >
             <div className="floating-titlebar" onMouseDown={moveWindow}>
-                <span>{win.title}</span>
+                <span>{getActivePanelId(win.layout) ?? win.title}</span>
 
                 <button
                     onMouseDown={(e) => e.stopPropagation()}
