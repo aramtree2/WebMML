@@ -90,6 +90,24 @@ function containsPanel(node: LayoutNode, id: string): boolean {
   return node.children.some((child) => containsPanel(child, id));
 }
 
+function setActivePanel(node: LayoutNode, panelId: string): LayoutNode {
+  if (node.type === "tabs") {
+    if (!node.ids.includes(panelId)) return node;
+
+    return {
+      ...node,
+      activeId: panelId,
+    };
+  }
+
+  return {
+    ...node,
+    children: node.children.map((child) =>
+      containsPanel(child, panelId) ? setActivePanel(child, panelId) : child
+    ),
+  };
+}
+
 function removePanel(node: LayoutNode, panelId: string): LayoutNode | null {
   if (node.type === "tabs") {
     const ids = node.ids.filter((id) => id !== panelId);
@@ -174,6 +192,53 @@ function insertPanel(
     children: node.children.map((child) =>
       containsPanel(child, targetId)
         ? insertPanel(child, targetId, panelId, direction)
+        : child
+    ),
+  };
+}
+
+function splitPanelBySelf(
+  node: LayoutNode,
+  panelId: string,
+  direction: Direction
+): LayoutNode {
+  if (direction === "center") return node;
+
+  if (node.type === "tabs") {
+    if (!node.ids.includes(panelId)) return node;
+
+    const restIds = node.ids.filter((id) => id !== panelId);
+
+    if (restIds.length === 0) return node;
+
+    const movingPanel: LayoutNode = {
+      type: "tabs",
+      ids: [panelId],
+      activeId: panelId,
+    };
+
+    const restPanel: LayoutNode = {
+      type: "tabs",
+      ids: restIds,
+      activeId: restIds.includes(node.activeId) ? node.activeId : restIds[0],
+    };
+
+    const axis = direction === "left" || direction === "right" ? "row" : "column";
+    const movingFirst = direction === "left" || direction === "top";
+
+    return {
+      type: "split",
+      direction: axis,
+      children: movingFirst ? [movingPanel, restPanel] : [restPanel, movingPanel],
+      sizes: [50, 50],
+    };
+  }
+
+  return {
+    ...node,
+    children: node.children.map((child) =>
+      containsPanel(child, panelId)
+        ? splitPanelBySelf(child, panelId, direction)
         : child
     ),
   };
@@ -444,6 +509,23 @@ function App() {
     }));
   };
 
+  const handleSelectTab = (panelId: string, windowId: string | "main") => {
+    if (windowId === "main") {
+      setMainLayout((prev) => setActivePanel(prev, panelId));
+    } else {
+      setFloating((prev) =>
+        prev.map((win) =>
+          win.id === windowId
+            ? {
+                ...win,
+                layout: setActivePanel(win.layout, panelId),
+              }
+            : win
+        )
+      );
+    }
+  };
+
   const dockFloatingWindow = (
     draggedWindowId: string,
     targetWindowId: string | "main",
@@ -453,10 +535,7 @@ function App() {
     if (!dragged) return;
 
     if (targetWindowId === "main") {
-      setMainLayout((prev) =>
-        wrapLayoutByEdge(prev, dragged.layout, direction)
-      );
-
+      setMainLayout((prev) => wrapLayoutByEdge(prev, dragged.layout, direction));
       setFloating((prev) => prev.filter((win) => win.id !== draggedWindowId));
     } else {
       setFloating((prev) =>
@@ -597,8 +676,6 @@ function App() {
 
     const movingPanel = dragInfo.panelId;
 
-    if (movingPanel === targetPanelId) return;
-
     if (dragInfo.sourceWindowId === "main" && mainPanelCount <= 1) {
       setDragInfo(null);
       setDropPreview(null);
@@ -607,6 +684,33 @@ function App() {
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const direction = getDropDirection(rect, e.clientX, e.clientY);
+
+    if (movingPanel === targetPanelId) {
+      if (direction === "center") {
+        setDragInfo(null);
+        setDropPreview(null);
+        return;
+      }
+
+      if (targetWindowId === "main") {
+        setMainLayout((prev) => splitPanelBySelf(prev, movingPanel, direction));
+      } else {
+        setFloating((prev) =>
+          prev.map((win) =>
+            win.id === targetWindowId
+              ? {
+                  ...win,
+                  layout: splitPanelBySelf(win.layout, movingPanel, direction),
+                }
+              : win
+          )
+        );
+      }
+
+      setDragInfo(null);
+      setDropPreview(null);
+      return;
+    }
 
     removeDraggingPanelEverywhere(movingPanel);
 
@@ -639,7 +743,7 @@ function App() {
   const handleDragOverPanel = (targetPanelId: string, e: React.DragEvent) => {
     e.preventDefault();
 
-    if (!dragInfo || dragInfo.panelId === targetPanelId) {
+    if (!dragInfo) {
       setDropPreview(null);
       return;
     }
@@ -656,6 +760,11 @@ function App() {
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const direction = getDropDirection(rect, e.clientX, e.clientY);
+
+    if (dragInfo.panelId === targetPanelId && direction === "center") {
+      setDropPreview(null);
+      return;
+    }
 
     setDropPreview({
       targetId: targetPanelId,
@@ -746,6 +855,7 @@ function App() {
             mainPanelCount={mainPanelCount}
             onDetach={detachPanel}
             onRestore={restorePanel}
+            onSelectTab={handleSelectTab}
             onDropPanel={handleDropOnPanel}
             onDragOverPanel={handleDragOverPanel}
             onDragStart={setDragInfo}
@@ -775,6 +885,7 @@ function App() {
             onDockFloatingWindow={dockFloatingWindow}
             onDetach={detachPanel}
             onRestore={restorePanel}
+            onSelectTab={handleSelectTab}
             onDropPanel={handleDropOnPanel}
             onDragOverPanel={handleDragOverPanel}
             onDragStart={setDragInfo}
@@ -801,6 +912,7 @@ function FloatingView({
   onDockFloatingWindow,
   onDetach,
   onRestore,
+  onSelectTab,
   onDropPanel,
   onDragOverPanel,
   onDragStart,
@@ -820,6 +932,7 @@ function FloatingView({
   ) => void;
   onDetach: (id: string) => void;
   onRestore: (id: string, windowId: string) => void;
+  onSelectTab: (panelId: string, windowId: string | "main") => void;
   onDropPanel: (
     targetPanelId: string,
     targetWindowId: string | "main",
@@ -976,6 +1089,7 @@ function FloatingView({
           mainPanelCount={mainPanelCount}
           onDetach={onDetach}
           onRestore={onRestore}
+          onSelectTab={onSelectTab}
           onDropPanel={onDropPanel}
           onDragOverPanel={onDragOverPanel}
           onDragStart={onDragStart}
@@ -1014,6 +1128,7 @@ function LayoutView({
   mainPanelCount,
   onDetach,
   onRestore,
+  onSelectTab,
   onDropPanel,
   onDragOverPanel,
   onDragStart,
@@ -1029,6 +1144,7 @@ function LayoutView({
   mainPanelCount: number;
   onDetach: (id: string) => void;
   onRestore: (id: string, windowId: string) => void;
+  onSelectTab: (panelId: string, windowId: string | "main") => void;
   onDropPanel: (
     targetPanelId: string,
     targetWindowId: string | "main",
@@ -1113,6 +1229,7 @@ function LayoutView({
                 mainPanelCount={mainPanelCount}
                 onDetach={onDetach}
                 onRestore={onRestore}
+                onSelectTab={onSelectTab}
                 onDropPanel={onDropPanel}
                 onDragOverPanel={onDragOverPanel}
                 onDragStart={onDragStart}
@@ -1149,6 +1266,7 @@ function LayoutView({
             key={id}
             className={`tab ${id === activeId ? "active" : ""}`}
             draggable={canDrag}
+            onClick={() => onSelectTab(id, windowId)}
             onDragStart={(e) => {
               if (!canDrag) {
                 e.preventDefault();
@@ -1176,7 +1294,6 @@ function LayoutView({
         onDrop={(e) => onDropPanel(activeId, windowId, e)}
       >
         {dragInfo &&
-          dragInfo.panelId !== activeId &&
           dropPreview?.targetId === activeId && (
             <div className={`drop-preview ${dropPreview.direction}`} />
           )}
