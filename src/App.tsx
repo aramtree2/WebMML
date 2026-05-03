@@ -1,13 +1,19 @@
 import { useEffect, useMemo } from "react";
 import "./App.css";
 import { EditorShell } from "./components/editor/EditorShell";
-import { createDefaultLayoutState } from "./layouts/defaultLayout";
+import { createDefaultLayoutState, normalizeLayoutState } from "./layouts/defaultLayout";
 import { loadLayoutState, saveLayoutState } from "./storage/layoutStorage";
 import { useDockingLayout } from "./hooks/useDockingLayout";
 
 function App() {
     const initialLayoutState = useMemo(() => {
-        return loadLayoutState() ?? createDefaultLayoutState();
+        const savedLayoutState = loadLayoutState();
+
+        if (savedLayoutState) {
+            return normalizeLayoutState(savedLayoutState);
+        }
+
+        return createDefaultLayoutState();
     }, []);
 
     const docking = useDockingLayout(initialLayoutState);

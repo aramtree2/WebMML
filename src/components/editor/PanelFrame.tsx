@@ -1,6 +1,7 @@
 import type React from "react";
 import type { DragInfo, DropPreview } from "../../types/layout";
 import { renderPanel } from "../panels/panelRegistry";
+import { getPanelTitle } from "../../constants/panels";
 
 type PanelFrameProps = {
     ids: string[];
@@ -75,7 +76,7 @@ export function PanelFrame({
                         }}
                         onDragEnd={onDragEnd}
                     >
-                        {id}
+                        {getPanelTitle(id)}
                     </div>
                 ))}
             </div>

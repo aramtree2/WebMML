@@ -9,6 +9,7 @@ import type {
 } from "../../types/layout";
 import { getTargetEdgePreview } from "../../utils/dropPosition";
 import { LayoutView } from "./LayoutView";
+import { getPanelTitle } from "../../constants/panels";
 
 function getActivePanelId(node: LayoutNode): string | null {
     if (node.type === "tabs") {
@@ -159,7 +160,7 @@ export function FloatingWindowView({
             }
         >
             <div className="floating-titlebar" onMouseDown={moveWindow}>
-                <span>{getActivePanelId(win.layout) ?? win.title}</span>
+                <span>{getPanelTitle(getActivePanelId(win.layout) ?? win.title)}</span>
 
                 <button
                     onMouseDown={(e) => e.stopPropagation()}
