@@ -8,16 +8,25 @@ import type { WmlProject } from "../../core/wml/wmlTypes";
 import { midiToWml } from "../../core/parser/midiToWml";
 import { mmlToWml, extractTracksInfo } from "../../core/parser/mmlToWml";
 
+import "./ImportDialog.css";
+
 type ImportDialogProps = {
     onClose: () => void;
 };
 
 type TrackRow = {
     index: number;
+    fixedTrackNumber: number;
     name: string;
     eventCount: number;
     instrument: number;
+    originalInstrument: number;
     section: number;
+};
+
+type DropPreview = {
+    targetIndex: number;
+    position: "before" | "after" | "merge";
 };
 
 const MML_EXTS = ["mml", "mmi", "ms2mml", "txt"];
@@ -51,31 +60,23 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 
     const [isDraggingFile, setIsDraggingFile] = useState(false);
     const [dragTrackIndex, setDragTrackIndex] = useState<number | null>(null);
+    const [dropPreview, setDropPreview] = useState<DropPreview | null>(null);
     const [instrumentModalIndex, setInstrumentModalIndex] =
         useState<number | null>(null);
 
     const getExt = (fileName: string) =>
         fileName.split(".").pop()?.toLowerCase() ?? "";
 
-    const normalizeSections = (rows: TrackRow[]) => {
+    const getSectionDisplayNumber = (section: number) => {
         const sectionOrder: number[] = [];
 
-        rows.forEach((row) => {
-            if (!sectionOrder.includes(row.section)) {
-                sectionOrder.push(row.section);
+        tracks.forEach((track) => {
+            if (!sectionOrder.includes(track.section)) {
+                sectionOrder.push(track.section);
             }
         });
 
-        const sectionMap = new Map<number, number>();
-
-        sectionOrder.forEach((section, index) => {
-            sectionMap.set(section, index + 1);
-        });
-
-        return rows.map((row) => ({
-            ...row,
-            section: sectionMap.get(row.section) ?? row.section,
-        }));
+        return sectionOrder.indexOf(section) + 1;
     };
 
     const selectFile = async (selectedFile: File) => {
@@ -102,13 +103,19 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                 const midi = new Midi(buffer);
 
                 const rows: TrackRow[] = midi.tracks
-                    .map((track, index) => ({
-                        index,
-                        name: track.name || `track ${index + 1}`,
-                        eventCount: track.notes.length,
-                        instrument: track.instrument.number + 1,
-                        section: index + 1,
-                    }))
+                    .map((track, index) => {
+                        const inst = track.instrument.number + 1;
+
+                        return {
+                            index,
+                            fixedTrackNumber: index + 1,
+                            name: track.name || `track ${index + 1}`,
+                            eventCount: track.notes.length,
+                            instrument: inst,
+                            originalInstrument: inst,
+                            section: index + 1,
+                        };
+                    })
                     .filter((row) => row.eventCount > 0);
 
                 setTracks(rows);
@@ -120,9 +127,11 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 
                 const rows: TrackRow[] = infos.map((info, i) => ({
                     index: info.index,
+                    fixedTrackNumber: i + 1,
                     name: `track ${i + 1}`,
                     eventCount: 0,
                     instrument: info.defaultInstrument,
+                    originalInstrument: info.defaultInstrument,
                     section: i + 1,
                 }));
 
@@ -137,7 +146,6 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
         if (!selectedFile) return;
-
         selectFile(selectedFile);
     };
 
@@ -147,11 +155,14 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 
         const droppedFile = e.dataTransfer.files?.[0];
         if (!droppedFile) return;
-
         selectFile(droppedFile);
     };
 
-    const moveSection = (fromIndex: number, toIndex: number) => {
+    const moveSection = (
+        fromIndex: number,
+        toIndex: number,
+        position: "before" | "after"
+    ) => {
         setTracks((prev) => {
             const from = prev.find((row) => row.index === fromIndex);
             const target = prev.find((row) => row.index === toIndex);
@@ -159,45 +170,92 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             if (!from || !target) return prev;
             if (from.section === target.section) return prev;
 
-            const movingSection = from.section;
-            const targetSection = target.section;
+            const movingRows = prev.filter((row) => row.section === from.section);
+            const remainingRows = prev.filter((row) => row.section !== from.section);
 
-            const movingRows = prev.filter((row) => row.section === movingSection);
-            const remainingRows = prev.filter((row) => row.section !== movingSection);
+            const targetPositions = remainingRows
+                .map((row, idx) => ({ row, idx }))
+                .filter(({ row }) => row.section === target.section)
+                .map(({ idx }) => idx);
 
-            const targetPos = remainingRows.findIndex(
-                (row) => row.section === targetSection
-            );
+            if (targetPositions.length === 0) return prev;
 
-            if (targetPos === -1) return prev;
+            const insertPos =
+                position === "before"
+                    ? targetPositions[0]
+                    : targetPositions[targetPositions.length - 1] + 1;
 
             const nextRows = [...remainingRows];
-            nextRows.splice(targetPos, 0, ...movingRows);
+            nextRows.splice(insertPos, 0, ...movingRows);
 
-            return normalizeSections(nextRows);
+            return nextRows;
         });
     };
 
     const mergeSectionToSection = (fromIndex: number, targetIndex: number) => {
         setTracks((prev) => {
-            const from = prev.find((row) => row.index === fromIndex);     
-            const target = prev.find((row) => row.index === targetIndex); 
+            const from = prev.find((row) => row.index === fromIndex);
+            const target = prev.find((row) => row.index === targetIndex);
 
             if (!from || !target) return prev;
             if (from.section === target.section) return prev;
 
-            return normalizeSections(
-                prev.map((row) =>
-                    row.section === target.section
-                        ? {
-                            ...row,
-                            section: from.section,
-                            instrument: from.instrument,
-                        }
-                        : row
-                )
+            const fromSection = from.section;
+            const targetSection = target.section;
+
+            const fromRows = prev.filter((row) => row.section === fromSection);
+            const targetRows = prev
+                .filter((row) => row.section === targetSection)
+                .map((row) => ({
+                    ...row,
+                    section: fromSection,
+                    instrument: from.instrument,
+                }));
+
+            const otherRows = prev.filter(
+                (row) => row.section !== fromSection && row.section !== targetSection
             );
+
+            const insertPos = otherRows.findIndex((row) => {
+                const originalTargetPos = prev.findIndex((p) => p.index === target.index);
+                const rowOriginalPos = prev.findIndex((p) => p.index === row.index);
+                return rowOriginalPos > originalTargetPos;
+            });
+
+            const mergedRows = [...fromRows, ...targetRows];
+
+            if (insertPos === -1) {
+                return [...otherRows, ...mergedRows];
+            }
+
+            const nextRows = [...otherRows];
+            nextRows.splice(insertPos, 0, ...mergedRows);
+            return nextRows;
         });
+    };
+
+    const handleTrackDragOver = (
+        e: React.DragEvent<HTMLTableRowElement>,
+        targetIndex: number
+    ) => {
+        e.preventDefault();
+
+        if (dragTrackIndex === null || dragTrackIndex === targetIndex) {
+            setDropPreview(null);
+            return;
+        }
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const ratio = y / rect.height;
+
+        if (ratio < 0.25) {
+            setDropPreview({ targetIndex, position: "before" });
+        } else if (ratio > 0.75) {
+            setDropPreview({ targetIndex, position: "after" });
+        } else {
+            setDropPreview({ targetIndex, position: "merge" });
+        }
     };
 
     const handleTrackDrop = (
@@ -207,6 +265,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
         e.preventDefault();
 
         if (dragTrackIndex === null || dragTrackIndex === targetIndex) {
+            setDropPreview(null);
             setDragTrackIndex(null);
             return;
         }
@@ -215,13 +274,39 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
         const y = e.clientY - rect.top;
         const ratio = y / rect.height;
 
-        if (ratio > 0.25 && ratio < 0.75) {
-            mergeSectionToSection(dragTrackIndex, targetIndex);
+        if (ratio < 0.25) {
+            moveSection(dragTrackIndex, targetIndex, "before");
+        } else if (ratio > 0.75) {
+            moveSection(dragTrackIndex, targetIndex, "after");
         } else {
-            moveSection(dragTrackIndex, targetIndex);
+            mergeSectionToSection(dragTrackIndex, targetIndex);
         }
 
+        setDropPreview(null);
         setDragTrackIndex(null);
+    };
+
+    const splitSection = (section: number) => {
+        setTracks((prev) => {
+            const sectionRows = prev.filter((row) => row.section === section);
+
+            if (sectionRows.length <= 1) return prev;
+
+            let nextSection = Date.now();
+
+            return prev.map((row) => {
+                if (row.section !== section) return row;
+
+                const newRow = {
+                    ...row,
+                    section: nextSection,
+                    instrument: row.originalInstrument,
+                };
+
+                nextSection++;
+                return newRow;
+            });
+        });
     };
 
     const changeInstrument = (trackIndex: number, instrument: number) => {
@@ -232,9 +317,10 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             return prev.map((row) =>
                 row.section === current.section
                     ? {
-                        ...row,
-                        instrument,
-                    }
+                          ...row,
+                          instrument,
+                          originalInstrument: instrument,
+                      }
                     : row
             );
         });
@@ -251,7 +337,10 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
         try {
             let wml: WmlProject;
 
-            const instrumentOverrides = tracks.map((track) => track.instrument);
+            const instrumentOverrides: number[] = [];
+            tracks.forEach((track) => {
+                instrumentOverrides[track.index] = track.instrument;
+            });
 
             if (MML_EXTS.includes(ext)) {
                 wml = mmlToWml(fileText, {
@@ -302,8 +391,9 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 
     return (
         <DialogFrame title="가져오기" onClose={onClose} onConfirm={handleImport}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div className="import-dialog">
                 <div
+                    className={`drop-zone ${isDraggingFile ? "dragging" : ""}`}
                     onClick={() => inputRef.current?.click()}
                     onDrop={handleFileDrop}
                     onDragOver={(e) => {
@@ -311,17 +401,9 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                         setIsDraggingFile(true);
                     }}
                     onDragLeave={() => setIsDraggingFile(false)}
-                    style={{
-                        border: isDraggingFile ? "2px solid #4f7cff" : "2px dashed #aaa",
-                        borderRadius: 12,
-                        padding: 28,
-                        textAlign: "center",
-                        cursor: "pointer",
-                        background: isDraggingFile ? "#eef3ff" : "#fafafa",
-                    }}
                 >
                     <strong>파일을 클릭해서 선택하거나 여기에 드래그하세요.</strong>
-                    <p style={{ fontSize: 13, color: "#666" }}>
+                    <p className="helper-text">
                         지원 형식: .mmi, .ms2mml, .txt, .midi, .mid
                     </p>
 
@@ -333,7 +415,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                     type="file"
                     accept=".mmi,.ms2mml,.txt,.midi,.mid"
                     onChange={handleInputChange}
-                    style={{ display: "none" }}
+                    className="hidden-file-input"
                 />
 
                 <div>
@@ -342,19 +424,25 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                     <label>
                         시작 박자:{" "}
                         <input
+                            className="time-input"
                             type="number"
                             min={1}
-                            value={numerator}
-                            onChange={(e) => setNumerator(Number(e.target.value))}
-                            style={{ width: 60 }}
+                            value={numerator || ""}
+                            onChange={(e) => {
+                                const value = e.target.value;
+                                setNumerator(value === "" ? 0 : parseInt(value, 10));
+                            }}
                         />
                         {" / "}
                         <input
+                            className="time-input"
                             type="number"
                             min={1}
-                            value={denominator}
-                            onChange={(e) => setDenominator(Number(e.target.value))}
-                            style={{ width: 60 }}
+                            value={denominator || ""}
+                            onChange={(e) => {
+                                const value = e.target.value;
+                                setDenominator(value === "" ? 0 : parseInt(value, 10));
+                            }}
                         />
                     </label>
                 </div>
@@ -363,24 +451,18 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                     <div>
                         <h3>박자, 악기 설정 창</h3>
 
-                        <p style={{ fontSize: 13, color: "#666" }}>
+                        <p className="helper-text">
                             드래그해서 순서를 바꾸고, 다른 트랙 가운데에 놓으면 섹션 전체가
-                            같은 섹션으로 합쳐집니다.
+                            같은 섹션으로 합쳐집니다. 섹션 번호를 더블클릭하면 섹션이 분리됩니다.
                         </p>
 
-                        <table
-                            style={{
-                                width: "100%",
-                                borderCollapse: "collapse",
-                                border: "1px solid #ddd",
-                            }}
-                        >
+                        <table className="track-table">
                             <thead>
                                 <tr>
-                                    <th style={thStyle}>섹션</th>
-                                    <th style={thStyle}>악기</th>
-                                    <th style={thStyle}>트랙</th>
-                                    <th style={thStyle}>이벤트 개수</th>
+                                    <th>섹션</th>
+                                    <th>악기</th>
+                                    <th>트랙</th>
+                                    <th>이벤트 개수</th>
                                 </tr>
                             </thead>
 
@@ -390,27 +472,48 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                                         tracks.findIndex((t) => t.section === track.section) ===
                                         tracks.findIndex((t) => t.index === track.index);
 
+                                    const preview =
+                                        dropPreview?.targetIndex === track.index
+                                            ? dropPreview.position
+                                            : null;
+
+                                    const rowClassName = [
+                                        "track-row",
+                                        dragTrackIndex === track.index ? "dragging" : "",
+                                        preview === "before" ? "before" : "",
+                                        preview === "after" ? "after" : "",
+                                        preview === "merge" ? "merge" : "",
+                                    ]
+                                        .filter(Boolean)
+                                        .join(" ");
+
                                     return (
                                         <tr
                                             key={track.index}
+                                            className={rowClassName}
                                             draggable
                                             onDragStart={() => setDragTrackIndex(track.index)}
-                                            onDragOver={(e) => e.preventDefault()}
+                                            onDragOver={(e) => handleTrackDragOver(e, track.index)}
+                                            onDragLeave={() => setDropPreview(null)}
                                             onDrop={(e) => handleTrackDrop(e, track.index)}
-                                            style={{
-                                                cursor: "grab",
-                                                background:
-                                                    dragTrackIndex === track.index ? "#f0f4ff" : "white",
-                                            }}
                                         >
-                                            <td style={tdStyle}>{firstInSection && track.section}</td>
+                                            <td
+                                                className={firstInSection ? "section-cell" : ""}
+                                                onDoubleClick={() => {
+                                                    if (firstInSection) {
+                                                        splitSection(track.section);
+                                                    }
+                                                }}
+                                                title={firstInSection ? "더블클릭하면 섹션을 분리합니다" : ""}
+                                            >
+                                                {firstInSection &&
+                                                    getSectionDisplayNumber(track.section)}
+                                            </td>
 
                                             <td
-                                                style={{
-                                                    ...tdStyle,
-                                                    cursor: "pointer",
-                                                    fontWeight: firstInSection ? 600 : 400,
-                                                }}
+                                                className={`instrument-cell ${
+                                                    firstInSection ? "section-head" : ""
+                                                }`}
                                                 onClick={() => setInstrumentModalIndex(track.index)}
                                             >
                                                 {firstInSection
@@ -418,11 +521,9 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                                                     : ""}
                                             </td>
 
-                                            <td style={tdStyle}>{track.name}</td>
+                                            <td>{`track ${track.fixedTrackNumber}`}</td>
 
-                                            <td style={tdStyle}>
-                                                {track.eventCount > 0 ? track.eventCount : "-"}
-                                            </td>
+                                            <td>{track.eventCount > 0 ? track.eventCount : "-"}</td>
                                         </tr>
                                     );
                                 })}
@@ -431,30 +532,15 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                     </div>
                 )}
 
-                {error && <p style={{ color: "red" }}>{error}</p>}
+                {error && <p className="error-text">{error}</p>}
 
                 {selectedTrack && (
                     <div
-                        style={{
-                            position: "fixed",
-                            inset: 0,
-                            background: "rgba(0,0,0,0.25)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            zIndex: 9999,
-                        }}
+                        className="instrument-overlay"
                         onClick={() => setInstrumentModalIndex(null)}
                     >
                         <div
-                            style={{
-                                background: "white",
-                                borderRadius: 12,
-                                padding: 20,
-                                width: 320,
-                                maxHeight: 420,
-                                overflowY: "auto",
-                            }}
+                            className="instrument-modal"
                             onClick={(e) => e.stopPropagation()}
                         >
                             <h3>악기 선택</h3>
@@ -462,23 +548,12 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                             {INSTRUMENTS.map((inst) => (
                                 <button
                                     key={inst.value}
+                                    className={`instrument-btn ${
+                                        selectedTrack.instrument === inst.value ? "active" : ""
+                                    }`}
                                     onClick={() => {
                                         changeInstrument(selectedTrack.index, inst.value);
                                         setInstrumentModalIndex(null);
-                                    }}
-                                    style={{
-                                        display: "block",
-                                        width: "100%",
-                                        padding: 10,
-                                        marginBottom: 8,
-                                        textAlign: "left",
-                                        border: "1px solid #ddd",
-                                        borderRadius: 8,
-                                        background:
-                                            selectedTrack.instrument === inst.value
-                                                ? "#eef3ff"
-                                                : "white",
-                                        cursor: "pointer",
                                     }}
                                 >
                                     [{inst.value}] {inst.label}
@@ -493,17 +568,8 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 }
 
 function getInstrumentName(value: number) {
-    return INSTRUMENTS.find((instrument) => instrument.value === value)?.label ?? `악기 ${value}`;
+    return (
+        INSTRUMENTS.find((instrument) => instrument.value === value)?.label ??
+        `악기 ${value}`
+    );
 }
-
-const thStyle: React.CSSProperties = {
-    border: "1px solid #ddd",
-    padding: 10,
-    textAlign: "left",
-    background: "#f7f7f7",
-};
-
-const tdStyle: React.CSSProperties = {
-    border: "1px solid #ddd",
-    padding: 10,
-};
