@@ -1,4 +1,4 @@
-import type { WmlProject, WmlSection, Chord, NoteEvent } from "./wmlTypes";
+import type { WmlProject } from "./wmlTypes";
 
 // --- id 생성 ---
 export function createId(prefix: string) {
