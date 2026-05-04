@@ -1,0 +1,64 @@
+/* 상단 메뉴바 기본 정렬 */
+.menu-bar {
+    display: flex;
+    gap: 5px;
+    position: relative;
+    z-index: 9999; /* 화면 최상단에 뜨도록 보장 */
+}
+
+/* 메뉴 뼈대 (드롭다운의 기준점) */
+.menu-wrapper {
+    position: relative;
+}
+
+/* 드롭다운 창 본체 */
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background-color: #f9f9f9; /* 윈도우 기본 메뉴 색상 느낌 */
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+    min-width: 160px;
+    padding: 5px 0;
+}
+
+/* 일반 버튼 아이템 */
+.dropdown-menu button {
+    background: none;
+    border: none;
+    text-align: left;
+    padding: 8px 15px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #333;
+
+    display: flex;
+    align-items: center;
+}
+
+/* 보기 메뉴의 체크박스 아이템 */
+.dropdown-item.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* 체크박스와 글씨 간격 */
+    padding: 8px 15px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #333;
+    user-select: none; /* 클릭 시 텍스트 파랗게 드래그되는 현상 방지 */
+}
+
+/* 마우스 올렸을 때 하이라이트 효과 */
+.dropdown-menu button:hover,
+.dropdown-item.checkbox-item:hover {
+    background-color: #e0eaff;
+}
+
+.checkbox-item input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+}
