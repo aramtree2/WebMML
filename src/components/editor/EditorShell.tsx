@@ -1,3 +1,5 @@
+import { DialogHost } from "../dialogs/DialogHost";
+import { useDialogState } from "../../hooks/useDialogState";
 import type { DockingLayoutController } from "../../hooks/useDockingLayout";
 import { MenuBar } from "./MenuBar";
 import { Workspace } from "./Workspace";
@@ -7,10 +9,13 @@ type EditorShellProps = {
 };
 
 export function EditorShell({ docking }: EditorShellProps) {
+    const { dialog, openDialog, closeDialog } = useDialogState();
+
     return (
-        <div className="app">
-            <MenuBar />
+        <>
+            <MenuBar onOpenDialog={openDialog} />
             <Workspace docking={docking} />
-        </div>
+            <DialogHost dialog={dialog} onClose={closeDialog} />
+        </>
     );
 }

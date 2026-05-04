@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
-import "./App.css";
+import "./styles/App.css";
+import "./styles/dialog.css";
 import { EditorShell } from "./components/editor/EditorShell";
 import { createDefaultLayoutState, normalizeLayoutState } from "./layouts/defaultLayout";
 import { loadLayoutState, saveLayoutState } from "./storage/layoutStorage";
