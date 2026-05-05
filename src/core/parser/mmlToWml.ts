@@ -583,34 +583,36 @@ export function mmlToWml(
     options.denominator ?? 4
   );
 
+  const groupedNotes = new Map<number, ParsedNote[]>();
+  const groupedSustains = new Map<number, SustainEvent[]>();
+  const instrumentOrder: number[] = [];
   const tempos: TempoEvent[] = [];
-  const sections: WmlSection[] = [];
 
   tracks.forEach((t, i) => {
     const instrument =
       Array.isArray(options.instrumentOverrides) &&
       options.instrumentOverrides[i] != null
         ? Number(options.instrumentOverrides[i])
-        : t.instrument ?? 1;
+        : 1;
+
+    if (!groupedNotes.has(instrument)) {
+      groupedNotes.set(instrument, []);
+      groupedSustains.set(instrument, [
+        { id: createId("sustain"), tick: 0, value: 0 },
+      ]);
+      instrumentOrder.push(instrument);
+    }
 
     const parsed = parseSingleMMLPart(t.mml);
 
+    groupedNotes.get(instrument)!.push(...parsed.chords);
     tempos.push(...parsed.tempoEvents.map(toTempoEvent));
 
-    const notes = parsed.chords;
-
-    if (notes.length === 0) return;
-
-    sections.push({
-      id: createId("section"),
-      name: `Instrument ${instrument}`,
-      instrument,
-      sustain:
-        parsed.sustainEvents.length > 0
-          ? normalizeSustainEvents(parsed.sustainEvents).map(toSustainEvent)
-          : [{ id: createId("sustain"), tick: 0, value: 0 }],
-      chords: notesToChords(notes),
-    });
+    if (instrument === 1 && parsed.sustainEvents.length > 0) {
+      groupedSustains
+        .get(instrument)!
+        .push(...normalizeSustainEvents(parsed.sustainEvents).map(toSustainEvent));
+    }
   });
 
   if (!tempos.length) {
@@ -618,6 +620,22 @@ export function mmlToWml(
       id: createId("tempo"),
       tick: 0,
       bpm: 120,
+    });
+  }
+
+  const sections: WmlSection[] = [];
+
+  for (const instrument of instrumentOrder) {
+    const notes = groupedNotes.get(instrument) ?? [];
+
+    if (notes.length === 0) continue;
+
+    sections.push({
+      id: createId("section"),
+      name: `Instrument ${instrument}`,
+      instrument,
+      sustain: mergeSustainEvents(groupedSustains.get(instrument) ?? []),
+      chords: notesToChords(notes),
     });
   }
 

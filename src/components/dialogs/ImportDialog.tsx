@@ -67,8 +67,6 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
     const getExt = (fileName: string) =>
         fileName.split(".").pop()?.toLowerCase() ?? "";
 
-    const createNewSectionId = () => Date.now() + Math.floor(Math.random() * 10000);
-
     const getSectionDisplayNumber = (section: number) => {
         const sectionOrder: number[] = [];
 
@@ -148,7 +146,6 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
         if (!selectedFile) return;
-
         selectFile(selectedFile);
     };
 
@@ -158,7 +155,6 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 
         const droppedFile = e.dataTransfer.files?.[0];
         if (!droppedFile) return;
-
         selectFile(droppedFile);
     };
 
@@ -196,67 +192,6 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
         });
     };
 
-    const detachTrackFromSection = (
-        fromIndex: number,
-        toIndex: number,
-        position: "before" | "after"
-    ) => {
-        setTracks((prev) => {
-            const from = prev.find((row) => row.index === fromIndex);
-            const target = prev.find((row) => row.index === toIndex);
-
-            if (!from || !target) return prev;
-
-            const sectionRows = prev.filter((row) => row.section === from.section);
-
-            if (sectionRows.length <= 1) {
-                return prev;
-            }
-
-            const detachedRow: TrackRow = {
-                ...from,
-                section: createNewSectionId(),
-                instrument: from.originalInstrument,
-            };
-
-            const remainingRows = prev.filter((row) => row.index !== fromIndex);
-
-            const targetPositions = remainingRows
-                .map((row, idx) => ({ row, idx }))
-                .filter(({ row }) => row.section === target.section)
-                .map(({ idx }) => idx);
-
-            if (targetPositions.length === 0) return prev;
-
-            const insertPos =
-                position === "before"
-                    ? targetPositions[0]
-                    : targetPositions[targetPositions.length - 1] + 1;
-
-            const nextRows = [...remainingRows];
-            nextRows.splice(insertPos, 0, detachedRow);
-
-            return nextRows;
-        });
-    };
-
-    const moveOrDetachTrack = (
-        fromIndex: number,
-        toIndex: number,
-        position: "before" | "after"
-    ) => {
-        const from = tracks.find((row) => row.index === fromIndex);
-        if (!from) return;
-
-        const sectionRows = tracks.filter((row) => row.section === from.section);
-
-        if (sectionRows.length > 1) {
-            detachTrackFromSection(fromIndex, toIndex, position);
-        } else {
-            moveSection(fromIndex, toIndex, position);
-        }
-    };
-
     const mergeSectionToSection = (fromIndex: number, targetIndex: number) => {
         setTracks((prev) => {
             const from = prev.find((row) => row.index === fromIndex);
@@ -265,15 +200,37 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             if (!from || !target) return prev;
             if (from.section === target.section) return prev;
 
-            return prev.map((row) =>
-                row.section === target.section
-                    ? {
-                          ...row,
-                          section: from.section,
-                          instrument: from.instrument,
-                      }
-                    : row
+            const fromSection = from.section;
+            const targetSection = target.section;
+
+            const fromRows = prev.filter((row) => row.section === fromSection);
+            const targetRows = prev
+                .filter((row) => row.section === targetSection)
+                .map((row) => ({
+                    ...row,
+                    section: fromSection,
+                    instrument: from.instrument,
+                }));
+
+            const otherRows = prev.filter(
+                (row) => row.section !== fromSection && row.section !== targetSection
             );
+
+            const insertPos = otherRows.findIndex((row) => {
+                const originalTargetPos = prev.findIndex((p) => p.index === target.index);
+                const rowOriginalPos = prev.findIndex((p) => p.index === row.index);
+                return rowOriginalPos > originalTargetPos;
+            });
+
+            const mergedRows = [...fromRows, ...targetRows];
+
+            if (insertPos === -1) {
+                return [...otherRows, ...mergedRows];
+            }
+
+            const nextRows = [...otherRows];
+            nextRows.splice(insertPos, 0, ...mergedRows);
+            return nextRows;
         });
     };
 
@@ -318,15 +275,38 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
         const ratio = y / rect.height;
 
         if (ratio < 0.25) {
-            moveOrDetachTrack(dragTrackIndex, targetIndex, "before");
+            moveSection(dragTrackIndex, targetIndex, "before");
         } else if (ratio > 0.75) {
-            moveOrDetachTrack(dragTrackIndex, targetIndex, "after");
+            moveSection(dragTrackIndex, targetIndex, "after");
         } else {
             mergeSectionToSection(dragTrackIndex, targetIndex);
         }
 
         setDropPreview(null);
         setDragTrackIndex(null);
+    };
+
+    const splitSection = (section: number) => {
+        setTracks((prev) => {
+            const sectionRows = prev.filter((row) => row.section === section);
+
+            if (sectionRows.length <= 1) return prev;
+
+            let nextSection = Date.now();
+
+            return prev.map((row) => {
+                if (row.section !== section) return row;
+
+                const newRow = {
+                    ...row,
+                    section: nextSection,
+                    instrument: row.originalInstrument,
+                };
+
+                nextSection++;
+                return newRow;
+            });
+        });
     };
 
     const changeInstrument = (trackIndex: number, instrument: number) => {
@@ -472,8 +452,8 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                         <h3>박자, 악기 설정 창</h3>
 
                         <p className="helper-text">
-                            가운데에 놓으면 섹션이 합쳐지고, 합쳐진 섹션의 트랙을 위/아래로
-                            드래그하면 해당 트랙만 분리됩니다.
+                            드래그해서 순서를 바꾸고, 다른 트랙 가운데에 놓으면 섹션 전체가
+                            같은 섹션으로 합쳐집니다. 섹션 번호를 더블클릭하면 섹션이 분리됩니다.
                         </p>
 
                         <table className="track-table">
@@ -517,7 +497,15 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                                             onDragLeave={() => setDropPreview(null)}
                                             onDrop={(e) => handleTrackDrop(e, track.index)}
                                         >
-                                            <td className={firstInSection ? "section-cell" : ""}>
+                                            <td
+                                                className={firstInSection ? "section-cell" : ""}
+                                                onDoubleClick={() => {
+                                                    if (firstInSection) {
+                                                        splitSection(track.section);
+                                                    }
+                                                }}
+                                                title={firstInSection ? "더블클릭하면 섹션을 분리합니다" : ""}
+                                            >
                                                 {firstInSection &&
                                                     getSectionDisplayNumber(track.section)}
                                             </td>
