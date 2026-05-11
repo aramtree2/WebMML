@@ -1,8 +1,11 @@
-import type{ InstrumentDef } from "../types";
+import type { InstrumentDef } from "../types";
 
 const base = import.meta.env.BASE_URL;
 
 export const piano: InstrumentDef = {
+    id: "piano",
+    name: "Piano",
+    type: "sampler",
     samples: [
         { note: 21, url: `${base}samples/piano/A0.wav` },
         { note: 33, url: `${base}samples/piano/A1.wav` },
