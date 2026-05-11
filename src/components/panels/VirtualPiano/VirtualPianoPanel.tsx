@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { SamplerInstrument } from "../../../core/virtualInstrument/engine/SamplerInstrument";
-import { piano } from "../../../core/virtualInstrument/instruments/piano";
+import { createInstrumentPlayer, DEFAULT_INSTRUMENT_ID } from "../../../core/virtualInstrument/instrumentRegistry";
 
 type HitArea =
     | {
@@ -204,18 +204,16 @@ export function VirtualPianoPanel() {
 
         try {
             const ctx = new AudioContext();
-            const instrument = new SamplerInstrument(ctx, piano);
-
             await ctx.resume();
-            await instrument.load();
+            const instrument = await createInstrumentPlayer(ctx, DEFAULT_INSTRUMENT_ID);
 
             audioContextRef.current = ctx;
             instrumentRef.current = instrument;
 
             syncReady(true);
-            console.log("piano ready");
+            console.log(`${DEFAULT_INSTRUMENT_ID} ready`);
         } catch (error) {
-            console.error("piano load failed", error);
+            console.error(`${DEFAULT_INSTRUMENT_ID} load failed`, error);
             syncReady(false);
         } finally {
             syncLoading(false);
@@ -813,10 +811,9 @@ export function VirtualPianoPanel() {
 
             stopInput(inputId, typeof note === "number" ? note : undefined);
             mouseVoiceKeyRef.current = null;
-        mouseNoteRef.current = null;
-        isMouseDownRef.current = false;
-        volumeDraggingRef.current = false;
             mouseNoteRef.current = null;
+            isMouseDownRef.current = false;
+            volumeDraggingRef.current = false;
         };
 
         const startMouseNote = (note: number) => {

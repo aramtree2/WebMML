@@ -1,3 +1,5 @@
+export type InstrumentId = string;
+
 export type ADSR = {
     attack: number;
     decay: number;
@@ -15,7 +17,12 @@ export type LoopDef = {
     end: number;
 };
 
+export type InstrumentType = "sampler";
+
 export type InstrumentDef = {
+    id: InstrumentId;
+    name: string;
+    type: InstrumentType;
     samples: SampleDef[];
     adsr: ADSR;
     loop?: LoopDef | null;
