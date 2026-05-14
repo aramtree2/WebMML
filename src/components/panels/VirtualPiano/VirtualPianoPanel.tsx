@@ -441,7 +441,7 @@ export function VirtualPianoPanel() {
         const value = volumeRef.current;
         const titleH = Math.max(18, Math.min(28, h * 0.13));
         const valueH = Math.max(20, Math.min(34, h * 0.14));
-        const labelGap = Math.max(16, w * 0.28);
+        // const labelGap = Math.max(16, w * 0.28);
         const trackX = x + w * 0.46;
         const trackTop = y + titleH + Math.max(10, h * 0.04);
         const trackBottom = y + h - valueH - Math.max(8, h * 0.04);
