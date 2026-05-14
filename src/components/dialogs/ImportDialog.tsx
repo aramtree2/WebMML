@@ -268,10 +268,10 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             return prev.map((row) =>
                 row.section === target.section
                     ? {
-                          ...row,
-                          section: from.section,
-                          instrument: from.instrument,
-                      }
+                        ...row,
+                        section: from.section,
+                        instrument: from.instrument,
+                    }
                     : row
             );
         });
@@ -337,73 +337,77 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             return prev.map((row) =>
                 row.section === current.section
                     ? {
-                          ...row,
-                          instrument,
-                          originalInstrument: instrument,
-                      }
+                        ...row,
+                        instrument,
+                        originalInstrument: instrument,
+                    }
                     : row
             );
         });
     };
 
     const handleImport = async () => {
-        if (!file) {
-            setError("먼저 파일을 선택하거나 드래그해 주세요.");
+    if (!file) {
+        setError("먼저 파일을 선택하거나 드래그해 주세요.");
+        return;
+    }
+
+    const ext = getExt(file.name);
+
+    try {
+        let wml: WmlProject;
+
+        const instrumentOverrides: number[] = [];
+        tracks.forEach((track) => {
+            instrumentOverrides[track.index] = track.instrument;
+        });
+
+        if (MML_EXTS.includes(ext)) {
+            wml = mmlToWml(fileText, {
+                title: file.name,
+                numerator,
+                denominator,
+                instrumentOverrides,
+            });
+        } else if (MIDI_EXTS.includes(ext)) {
+            if (!fileBuffer) return;
+
+            const selectedInstruments: Record<number, number> = {};
+
+            tracks.forEach((track) => {
+                selectedInstruments[track.index] = track.instrument;
+            });
+
+            wml = midiToWml(fileBuffer, {
+                title: file.name,
+                selectedInstruments,
+            });
+
+            wml.timeSignatures = [
+                {
+                    id: crypto.randomUUID(),
+                    tick: 0,
+                    numerator,
+                    denominator,
+                },
+            ];
+        } else {
+            setError(".mmi, .ms2mml, .txt, .midi, .mid 파일만 가져올 수 있습니다.");
             return;
         }
 
-        const ext = getExt(file.name);
+        setWmlProject(wml);
+        onClose();
+    } catch (err) {
+        console.error(err);
 
-        try {
-            let wml: WmlProject;
-
-            const instrumentOverrides: number[] = [];
-            tracks.forEach((track) => {
-                instrumentOverrides[track.index] = track.instrument;
-            });
-
-            if (MML_EXTS.includes(ext)) {
-                wml = mmlToWml(fileText, {
-                    title: file.name,
-                    numerator,
-                    denominator,
-                    instrumentOverrides,
-                });
-            } else if (MIDI_EXTS.includes(ext)) {
-                if (!fileBuffer) return;
-
-                const selectedInstruments: Record<number, number> = {};
-
-                tracks.forEach((track) => {
-                    selectedInstruments[track.index] = track.instrument;
-                });
-
-                wml = midiToWml(fileBuffer, {
-                    title: file.name,
-                    selectedInstruments,
-                });
-
-                wml.timeSignatures = [
-                    {
-                        id: crypto.randomUUID(),
-                        tick: 0,
-                        numerator,
-                        denominator,
-                    },
-                ];
-            } else {
-                setError(".mmi, .ms2mml, .txt, .midi, .mid 파일만 가져올 수 있습니다.");
-                return;
-            }
-
-            setWmlProject(wml);
-            onClose();
-        } catch (err) {
-            console.error(err);
+        if (err instanceof Error) {
+            setError(err.message);
+        } else {
             setError("파일 변환에 실패했습니다.");
         }
-    };
-
+    }
+};
     const selectedTrack =
         instrumentModalIndex !== null
             ? tracks.find((track) => track.index === instrumentModalIndex)
@@ -523,9 +527,8 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                                             </td>
 
                                             <td
-                                                className={`instrument-cell ${
-                                                    firstInSection ? "section-head" : ""
-                                                }`}
+                                                className={`instrument-cell ${firstInSection ? "section-head" : ""
+                                                    }`}
                                                 onClick={() => setInstrumentModalIndex(track.index)}
                                             >
                                                 {firstInSection
@@ -560,9 +563,8 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                             {INSTRUMENTS.map((inst) => (
                                 <button
                                     key={inst.value}
-                                    className={`instrument-btn ${
-                                        selectedTrack.instrument === inst.value ? "active" : ""
-                                    }`}
+                                    className={`instrument-btn ${selectedTrack.instrument === inst.value ? "active" : ""
+                                        }`}
                                     onClick={() => {
                                         changeInstrument(selectedTrack.index, inst.value);
                                         setInstrumentModalIndex(null);

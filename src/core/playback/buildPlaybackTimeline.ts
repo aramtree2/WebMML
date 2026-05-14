@@ -14,7 +14,7 @@ export function buildPlaybackTimeline(project: WmlProject): PlaybackTimeline {
 
     for (const section of project.sections) {
         for (const chord of section.chords) {
-            for (const note of chord) {
+            for (const note of chord.notes) {
                 const startTick = Math.max(0, note.tick);
                 const duration = Math.max(0, note.duration);
                 const endTick = startTick + duration;

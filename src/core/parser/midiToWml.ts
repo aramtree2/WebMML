@@ -1,14 +1,11 @@
 import { Midi } from "@tonejs/midi";
-import type { WmlProject, WmlSection, Chord } from "../wml/wmlTypes";
+import type { WmlProject, WmlSection, Chord, NoteEvent } from "../wml/wmlTypes";
 import { createId } from "../wml/wmlUtils";
 
 const TARGET_PPQ = 480;
 
 type MidiToWmlOptions = {
     title?: string;
-
-    // track index별로 사용자가 선택한 instrument
-    // 예: { 0: 1, 1: 25 }
     selectedInstruments?: Record<number, number>;
 };
 
@@ -29,22 +26,19 @@ export function midiToWml(
         sections: [],
     };
 
-    // 박자표 변환
-    project.timeSignatures = midi.header.timeSignatures.map(ts => ({
+    project.timeSignatures = midi.header.timeSignatures.map((ts) => ({
         id: createId("timesig"),
         tick: Math.round(ts.ticks * ratio),
         numerator: ts.timeSignature?.[0] ?? 4,
         denominator: ts.timeSignature?.[1] ?? 4,
     }));
 
-    // 템포 변환
     project.tempos = midi.header.tempos.map((t) => ({
         id: createId("tempo"),
         tick: Math.round(t.ticks * ratio),
         bpm: Math.round(t.bpm),
     }));
 
-    // 기본값 보정
     if (project.timeSignatures.length === 0) {
         project.timeSignatures.push({
             id: createId("timesig"),
@@ -62,33 +56,24 @@ export function midiToWml(
         });
     }
 
-    const groupedSections = new Map<number, WmlSection>();
-    const sectionOrder: number[] = [];
-
     midi.tracks.forEach((track, trackIndex) => {
         const selectedInstrument =
             options.selectedInstruments?.[trackIndex] ??
             track.instrument.number + 1;
 
-        if (!groupedSections.has(selectedInstrument)) {
-            groupedSections.set(selectedInstrument, {
-                id: createId("section"),
-                name: `Instrument ${selectedInstrument}`,
-                instrument: selectedInstrument,
-                sustain: [
-                    {
-                        id: createId("sustain"),
-                        tick: 0,
-                        value: selectedInstrument === 1 ? 1 : 0,
-                    },
-                ],
-                chords: [],
-            });
-
-            sectionOrder.push(selectedInstrument);
-        }
-
-        const section = groupedSections.get(selectedInstrument)!;
+        const section: WmlSection = {
+            id: createId("section"),
+            name: track.name || `track ${trackIndex + 1}`,
+            instrument: selectedInstrument,
+            sustain: [
+                {
+                    id: createId("sustain"),
+                    tick: 0,
+                    value: selectedInstrument === 1 ? 1 : 0,
+                },
+            ],
+            chords: [],
+        };
 
         track.notes.forEach((note) => {
             const tick = Math.round(note.ticks * ratio);
@@ -96,7 +81,7 @@ export function midiToWml(
 
             if (duration <= 0) duration = 1;
 
-            const noteEvent = {
+            const noteEvent: NoteEvent = {
                 id: createId("note"),
                 pitch: note.midi,
                 tick,
@@ -104,32 +89,30 @@ export function midiToWml(
                 velocity: Math.round(note.velocity * 15),
             };
 
-            // 같은 tick의 음들은 하나의 chord로 묶음
-            let chord = section.chords.find((c) => c[0]?.tick === tick);
+            let chord = section.chords.find(
+                (c) => c.notes[0]?.tick === tick
+            );
 
             if (!chord) {
-                chord = [];
+                chord = {
+                    id: createId("chord"),
+                    notes: [],
+                };
+
                 section.chords.push(chord);
             }
 
-            chord.push(noteEvent);
+            chord.notes.push(noteEvent);
         });
-    });
-
-    sectionOrder.forEach((instrument) => {
-        const section = groupedSections.get(instrument);
-
-        if (!section) return;
-        if (section.chords.length === 0) return;
 
         section.chords.sort((a, b) => {
-            const aTick = a[0]?.tick ?? 0;
-            const bTick = b[0]?.tick ?? 0;
+            const aTick = a.notes[0]?.tick ?? 0;
+            const bTick = b.notes[0]?.tick ?? 0;
             return aTick - bTick;
         });
 
         section.chords.forEach((chord: Chord) => {
-            chord.sort((a, b) => a.pitch - b.pitch);
+            chord.notes.sort((a, b) => a.pitch - b.pitch);
         });
 
         project.sections.push(section);
