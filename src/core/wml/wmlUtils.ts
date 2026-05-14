@@ -1,11 +1,9 @@
-import type { WmlProject } from "./wmlTypes";
+import type { Chord, WmlProject } from "./wmlTypes";
 
-// --- id 생성 ---
 export function createId(prefix: string) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// --- JSON 변환 ---
 export function wmlToJson(project: WmlProject): string {
     return JSON.stringify(project, null, 2);
 }
@@ -19,28 +17,44 @@ export function jsonToWml(json: string): WmlProject {
         throw new Error("JSON 파싱 실패");
     }
 
-    if (!isWmlProject(data)) {
+    if (!isWmlProjectLike(data)) {
         throw new Error("유효하지 않은 WML 구조");
     }
 
-    return data;
+    return normalizeWmlProject(data);
 }
 
-// --- 검증 ---
-function isWmlProject(data: any): data is WmlProject {
+function isWmlProjectLike(data: any): data is WmlProject {
     return (
         typeof data === "object" &&
         data !== null &&
         typeof data.id === "string" &&
         typeof data.title === "string" &&
-        typeof data.bpm === "number" &&
         Array.isArray(data.tempos) &&
         Array.isArray(data.timeSignatures) &&
         Array.isArray(data.sections)
     );
 }
 
-// --- 기본 생성 ---
+export function normalizeWmlProject(project: any): WmlProject {
+    return {
+        ...project,
+        sections: project.sections.map((section: any) => ({
+            ...section,
+            chords: section.chords.map((chord: any): Chord => {
+                if (Array.isArray(chord)) {
+                    return {
+                        id: createId("chord"),
+                        notes: chord,
+                    };
+                }
+
+                return chord;
+            }),
+        })),
+    };
+}
+
 export function createEmptyProject(): WmlProject {
     return {
         id: createId("project"),

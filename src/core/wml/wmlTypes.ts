@@ -6,7 +6,10 @@ export type NoteEvent = {
     velocity: number;
 };
 
-export type Chord = NoteEvent[];
+export type Chord = {
+    id: string;
+    notes: NoteEvent[];
+};
 
 export type SustainEvent = {
     id: string;

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { SamplerInstrument } from "../../../core/virtualInstrument/engine/SamplerInstrument";
-import { createInstrumentPlayer, DEFAULT_INSTRUMENT_ID } from "../../../core/virtualInstrument/instrumentRegistry";
+import type { InstrumentId } from "../../../core/virtualInstrument/types";
+import {
+    createInstrumentPlayer,
+    DEFAULT_INSTRUMENT_ID,
+    getAllInstrumentDefs,
+} from "../../../core/virtualInstrument/instrumentRegistry";
 
 type HitArea =
     | {
@@ -100,6 +105,16 @@ function wmlNoteToMidi(wmlNote: number) {
     return wmlNote + WML_TO_MIDI_OFFSET;
 }
 
+const instrumentOptions = getAllInstrumentDefs().map((def) => {
+    const extra = def as { name?: unknown; label?: unknown; displayName?: unknown };
+    const label = extra.name ?? extra.label ?? extra.displayName ?? def.id;
+
+    return {
+        id: def.id,
+        label: String(label),
+    };
+});
+
 export function VirtualPianoPanel() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -121,12 +136,15 @@ export function VirtualPianoPanel() {
     const sustainRef = useRef(false);
     const octavePageRef = useRef(3);
     const volumeRef = useRef(12);
+    const selectedInstrumentIdRef = useRef<InstrumentId>(DEFAULT_INSTRUMENT_ID);
 
     const [ready, setReady] = useState(false);
     const [loading, setLoading] = useState(false);
     const [sustain, setSustain] = useState(false);
     const [octavePage, setOctavePage] = useState(3);
     const [volume, setVolume] = useState(12);
+    const [selectedInstrumentId, setSelectedInstrumentId] =
+        useState<InstrumentId>(DEFAULT_INSTRUMENT_ID);
 
     function syncReady(value: boolean) {
         readyRef.current = value;
@@ -197,6 +215,18 @@ export function VirtualPianoPanel() {
         requestAnimationFrame(draw);
     }
 
+    async function loadInstrument(instrumentId: InstrumentId, ctx: AudioContext) {
+        const nextInstrument = await createInstrumentPlayer(ctx, instrumentId);
+        const prevInstrument = instrumentRef.current;
+
+        clearActiveNotes();
+        prevInstrument?.stopAll();
+
+        instrumentRef.current = nextInstrument;
+        selectedInstrumentIdRef.current = instrumentId;
+        setSelectedInstrumentId(instrumentId);
+    }
+
     async function handleEnableAudio() {
         if (instrumentRef.current || loadingRef.current) return;
 
@@ -205,16 +235,42 @@ export function VirtualPianoPanel() {
         try {
             const ctx = new AudioContext();
             await ctx.resume();
-            const instrument = await createInstrumentPlayer(ctx, DEFAULT_INSTRUMENT_ID);
+            await loadInstrument(selectedInstrumentIdRef.current, ctx);
 
             audioContextRef.current = ctx;
-            instrumentRef.current = instrument;
 
             syncReady(true);
-            console.log(`${DEFAULT_INSTRUMENT_ID} ready`);
+            console.log(`${selectedInstrumentIdRef.current} ready`);
         } catch (error) {
-            console.error(`${DEFAULT_INSTRUMENT_ID} load failed`, error);
+            console.error(`${selectedInstrumentIdRef.current} load failed`, error);
             syncReady(false);
+        } finally {
+            syncLoading(false);
+            requestAnimationFrame(draw);
+        }
+    }
+
+    async function handleInstrumentChange(instrumentId: InstrumentId) {
+        if (selectedInstrumentIdRef.current === instrumentId) return;
+
+        selectedInstrumentIdRef.current = instrumentId;
+        setSelectedInstrumentId(instrumentId);
+        clearActiveNotes();
+        requestAnimationFrame(draw);
+
+        const ctx = audioContextRef.current;
+        if (!ctx || !instrumentRef.current) return;
+
+        syncLoading(true);
+
+        try {
+            await ctx.resume();
+            await loadInstrument(instrumentId, ctx);
+            syncReady(true);
+            console.log(`${instrumentId} ready`);
+        } catch (error) {
+            console.error(`${instrumentId} load failed`, error);
+            syncReady(Boolean(instrumentRef.current));
         } finally {
             syncLoading(false);
             requestAnimationFrame(draw);
@@ -304,18 +360,21 @@ export function VirtualPianoPanel() {
         const outerPad = 0;
         const topH = cssHeight * 0.18;
         const sustainH = cssHeight * 0.14;
-        const volumeW = Math.max(18, cssWidth * 0.045);
+        const controlW = Math.min(Math.max(76, cssWidth * 0.08), 96);
+        const instrumentSelectH = topH;
 
         const x0 = outerPad;
         const y0 = outerPad;
         const fullW = cssWidth - outerPad * 2;
-        const pianoW = fullW - volumeW;
-        const volumeX = x0 + pianoW;
+        const pianoW = fullW - controlW;
+        const controlX = x0 + pianoW;
         const topY = y0;
         const keyY = topY + topH;
         const bottomY = cssHeight - outerPad;
         const sustainY = bottomY - sustainH;
         const keyH = sustainY - keyY;
+        const volumeY = topY + instrumentSelectH;
+        const volumeH = bottomY - volumeY;
 
         ctx.fillStyle = "#f8f8f8";
         ctx.strokeStyle = "#a0a0a0";
@@ -327,7 +386,8 @@ export function VirtualPianoPanel() {
         drawTopBar(ctx, hitAreas, x0, topY, pianoW, topH, enabled);
         drawKeys(ctx, hitAreas, x0, keyY, pianoW, keyH, enabled);
         drawSustain(ctx, hitAreas, x0, sustainY, pianoW, sustainH, enabled);
-        drawVolumeVertical(ctx, hitAreas, volumeX, topY, volumeW, bottomY - topY, enabled);
+        drawInstrumentSelectArea(ctx, controlX, topY, controlW, instrumentSelectH, enabled);
+        drawVolumeVertical(ctx, hitAreas, controlX, volumeY, controlW, volumeH, enabled);
 
         if (loadingRef.current || !readyRef.current) {
             ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
@@ -347,6 +407,28 @@ export function VirtualPianoPanel() {
         hitAreasRef.current = hitAreas;
     }
 
+    function drawInstrumentSelectArea(
+        ctx: CanvasRenderingContext2D,
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+        enabled: boolean
+    ) {
+        ctx.fillStyle = enabled ? "#efefef" : "#d0d0d0";
+        ctx.fillRect(x, y, w, h);
+
+        ctx.strokeStyle = "#a0a0a0";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, w, h);
+
+        ctx.fillStyle = enabled ? "#111" : "#777";
+        ctx.font = `bold ${Math.max(11, Math.min(18, h * 0.28))}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("악기", x + w / 2, y + h * 0.28);
+    }
+
     function drawVolumeVertical(
         ctx: CanvasRenderingContext2D,
         hitAreas: HitArea[],
@@ -357,71 +439,73 @@ export function VirtualPianoPanel() {
         enabled: boolean
     ) {
         const value = volumeRef.current;
-        const padY = h * 0.08;
-        const trackX = x + w / 2;
-        const trackTop = y + padY;
-        const trackBottom = y + h - padY;
-        const trackH = trackBottom - trackTop;
-        const knobH = Math.max(18, w * 1.15);
-        const knobW = Math.max(12, w * 0.65);
+        const titleH = Math.max(18, Math.min(28, h * 0.13));
+        const valueH = Math.max(20, Math.min(34, h * 0.14));
+        const labelGap = Math.max(16, w * 0.28);
+        const trackX = x + w * 0.46;
+        const trackTop = y + titleH + Math.max(10, h * 0.04);
+        const trackBottom = y + h - valueH - Math.max(8, h * 0.04);
+        const trackH = Math.max(1, trackBottom - trackTop);
         const t = value / 15;
-        const knobCenterY = trackBottom - trackH * t;
+        const currentY = trackBottom - trackH * t;
 
         ctx.fillStyle = enabled ? "#efefef" : "#d0d0d0";
         ctx.fillRect(x, y, w, h);
 
-        // 눈금
+        ctx.strokeStyle = "#a0a0a0";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, w, h);
+
+        ctx.fillStyle = enabled ? "#111" : "#777";
+        ctx.font = `bold ${Math.max(11, Math.min(18, titleH * 0.72))}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("볼륨", x + w / 2, y + titleH / 2);
+
+        // 0~15 눈금. 5단위는 길게 그리고 숫자를 표시한다.
         ctx.strokeStyle = enabled ? "#8c8c8c" : "#aaa";
         ctx.lineWidth = 1;
+        ctx.font = `${Math.max(9, Math.min(13, w * 0.14))}px sans-serif`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+
         for (let i = 0; i <= 15; i++) {
             const ty = trackBottom - (trackH * i) / 15;
             const major = i % 5 === 0;
-            const tickW = major ? w * 0.72 : w * 0.42;
+            const tickW = major ? Math.max(20, w * 0.42) : Math.max(10, w * 0.22);
 
             ctx.beginPath();
             ctx.moveTo(trackX - tickW / 2, ty);
             ctx.lineTo(trackX + tickW / 2, ty);
             ctx.stroke();
+
+            if (major) {
+                ctx.fillStyle = enabled ? "#333" : "#777";
+                ctx.fillText(String(i), trackX + tickW / 2 + 4, ty);
+            }
         }
 
-        // 트랙
-        ctx.strokeStyle = enabled ? "#111" : "#777";
-        ctx.lineWidth = Math.max(2, w * 0.08);
+        // 기준 트랙
+        ctx.strokeStyle = enabled ? "#777" : "#aaa";
+        ctx.lineWidth = Math.max(1, w * 0.018);
         ctx.beginPath();
         ctx.moveTo(trackX, trackTop);
         ctx.lineTo(trackX, trackBottom);
         ctx.stroke();
 
-        // 현재 볼륨 표시 구간
+        // 현재 볼륨: 손잡이 없이 파란 막대만 표시
         ctx.strokeStyle = enabled ? "#4a90e2" : "#999";
-        ctx.lineWidth = Math.max(2, w * 0.1);
+        ctx.lineWidth = Math.max(10, Math.min(18, w * 0.16));
         ctx.beginPath();
-        ctx.moveTo(trackX, knobCenterY);
+        ctx.moveTo(trackX, currentY);
         ctx.lineTo(trackX, trackBottom);
         ctx.stroke();
 
-        // 손잡이: 네모 기반
-        const knobX = trackX - knobW / 2;
-        const knobY = knobCenterY - knobH / 2;
-
-        ctx.fillStyle = enabled ? "#d9d9d9" : "#bdbdbd";
-        ctx.strokeStyle = enabled ? "#777" : "#999";
-        ctx.lineWidth = 1;
-        roundRect(ctx, knobX, knobY, knobW, knobH, Math.min(5, knobW * 0.25));
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.strokeStyle = enabled ? "#999" : "#aaa";
-        ctx.beginPath();
-        ctx.moveTo(knobX + knobW * 0.2, knobCenterY);
-        ctx.lineTo(knobX + knobW * 0.8, knobCenterY);
-        ctx.stroke();
-
         ctx.fillStyle = enabled ? "#111" : "#777";
-        ctx.font = `${Math.max(9, w * 0.34)}px sans-serif`;
+        ctx.font = `bold ${Math.max(14, Math.min(24, valueH * 0.76))}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(String(value), trackX, y + h - padY * 0.45);
+        ctx.fillText(String(value), x + w / 2, y + h - valueH / 2);
 
         hitAreas.push({
             kind: "volume",
@@ -436,9 +520,10 @@ export function VirtualPianoPanel() {
     function volumeValueFromCanvasY(canvasY: number, area: HitArea) {
         if (area.kind !== "volume") return volumeRef.current;
 
-        const padY = area.h * 0.08;
-        const top = area.y + padY;
-        const bottom = area.y + area.h - padY;
+        const titleH = Math.max(18, Math.min(28, area.h * 0.13));
+        const valueH = Math.max(20, Math.min(34, area.h * 0.14));
+        const top = area.y + titleH + Math.max(10, area.h * 0.04);
+        const bottom = area.y + area.h - valueH - Math.max(8, area.h * 0.04);
         const t = clamp((bottom - canvasY) / (bottom - top), 0, 1);
 
         return Math.round(t * 15);
@@ -946,8 +1031,32 @@ export function VirtualPianoPanel() {
                     height: "100%",
                     minHeight: 120,
                     overflow: "hidden",
+                    position: "relative",
                 }}
             >
+                <select
+                    value={selectedInstrumentId}
+                    disabled={loading}
+                    onChange={(e) => {
+                        void handleInstrumentChange(e.target.value as InstrumentId);
+                    }}
+                    style={{
+                        position: "absolute",
+                        top: "9.5%",
+                        right: 4,
+                        width: "calc(min(max(76px, 8%), 96px) - 8px)",
+                        height: 20,
+                        zIndex: 1,
+                        fontSize: 10,
+                        boxSizing: "border-box",
+                    }}
+                >
+                    {instrumentOptions.map((instrument) => (
+                        <option key={instrument.id} value={instrument.id}>
+                            {instrument.label}
+                        </option>
+                    ))}
+                </select>
                 <canvas
                     ref={canvasRef}
                     style={{
