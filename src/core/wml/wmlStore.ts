@@ -1,17 +1,15 @@
 import type { WmlProject } from "./wmlTypes";
-import { createEmptyProject } from "./wmlUtils";
+import { createEmptyProject, normalizeWmlProject } from "./wmlUtils";
 
 let currentProject: WmlProject = createEmptyProject();
 const listeners = new Set<(p: WmlProject) => void>();
 
-// --- get ---
 export function getWmlProject() {
     return currentProject;
 }
 
-// --- set ---
 export function setWmlProject(project: WmlProject, options?: { save?: boolean }) {
-    currentProject = project;
+    currentProject = normalizeWmlProject(project);
 
     if (options?.save !== false) {
         saveWmlProject();
@@ -20,7 +18,6 @@ export function setWmlProject(project: WmlProject, options?: { save?: boolean })
     listeners.forEach((l) => l(currentProject));
 }
 
-// --- update ---
 export function updateWmlProject(
     updater: (p: WmlProject) => WmlProject,
     options?: { save?: boolean }
@@ -28,13 +25,11 @@ export function updateWmlProject(
     setWmlProject(updater(currentProject), options);
 }
 
-// --- subscribe ---
 export function subscribeWmlProject(listener: (p: WmlProject) => void) {
     listeners.add(listener);
     return () => listeners.delete(listener);
 }
 
-// --- storage ---
 const STORAGE_KEY = "wml_project";
 
 export function saveWmlProject(project: WmlProject = currentProject) {
@@ -46,13 +41,12 @@ export function loadWmlProject(): WmlProject | null {
     if (!data) return null;
 
     try {
-        return JSON.parse(data);
+        return normalizeWmlProject(JSON.parse(data));
     } catch {
         return null;
     }
 }
 
-// --- init ---
 export function loadOrCreateWmlProject() {
     const loaded = loadWmlProject();
 
