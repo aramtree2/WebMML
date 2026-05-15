@@ -22,7 +22,7 @@ let state: ArrangementControlState = {
 
 const listeners = new Set<(state: ArrangementControlState) => void>();
 
-function cloneDefault(): ArrangementItemControl {
+function createDefaultControl(): ArrangementItemControl {
     return { ...defaultControl };
 }
 
@@ -42,111 +42,81 @@ export function subscribeArrangementControlState(
 }
 
 export function getSectionControl(sectionId: string) {
-    return state.sections[sectionId] ?? cloneDefault();
+    return state.sections[sectionId] ?? createDefaultControl();
 }
 
 export function getChordControl(chordId: string) {
-    return state.chords[chordId] ?? cloneDefault();
+    return state.chords[chordId] ?? createDefaultControl();
+}
+
+function updateSectionControl(
+    sectionId: string,
+    updater: (control: ArrangementItemControl) => ArrangementItemControl
+) {
+    state = {
+        ...state,
+        sections: {
+            ...state.sections,
+            [sectionId]: updater(getSectionControl(sectionId)),
+        },
+    };
+
+    emit();
+}
+
+function updateChordControl(
+    chordId: string,
+    updater: (control: ArrangementItemControl) => ArrangementItemControl
+) {
+    state = {
+        ...state,
+        chords: {
+            ...state.chords,
+            [chordId]: updater(getChordControl(chordId)),
+        },
+    };
+
+    emit();
 }
 
 export function toggleSectionVisible(sectionId: string) {
-    const current = getSectionControl(sectionId);
-
-    state = {
-        ...state,
-        sections: {
-            ...state.sections,
-            [sectionId]: {
-                ...current,
-                visible: !current.visible,
-            },
-        },
-    };
-
-    emit();
+    updateSectionControl(sectionId, (control) => ({
+        ...control,
+        visible: !control.visible,
+    }));
 }
 
 export function toggleSectionSolo(sectionId: string) {
-    const current = getSectionControl(sectionId);
-
-    state = {
-        ...state,
-        sections: {
-            ...state.sections,
-            [sectionId]: {
-                ...current,
-                solo: !current.solo,
-            },
-        },
-    };
-
-    emit();
+    updateSectionControl(sectionId, (control) => ({
+        ...control,
+        solo: !control.solo,
+    }));
 }
 
 export function toggleSectionMute(sectionId: string) {
-    const current = getSectionControl(sectionId);
-
-    state = {
-        ...state,
-        sections: {
-            ...state.sections,
-            [sectionId]: {
-                ...current,
-                mute: !current.mute,
-            },
-        },
-    };
-
-    emit();
+    updateSectionControl(sectionId, (control) => ({
+        ...control,
+        mute: !control.mute,
+    }));
 }
 
 export function toggleChordVisible(chordId: string) {
-    const current = getChordControl(chordId);
-
-    state = {
-        ...state,
-        chords: {
-            ...state.chords,
-            [chordId]: {
-                ...current,
-                visible: !current.visible,
-            },
-        },
-    };
-
-    emit();
+    updateChordControl(chordId, (control) => ({
+        ...control,
+        visible: !control.visible,
+    }));
 }
 
 export function toggleChordSolo(chordId: string) {
-    const current = getChordControl(chordId);
-
-    state = {
-        ...state,
-        chords: {
-            ...state.chords,
-            [chordId]: {
-                ...current,
-                solo: !current.solo,
-            },
-        },
-    };
-
-    emit();
+    updateChordControl(chordId, (control) => ({
+        ...control,
+        solo: !control.solo,
+    }));
 }
 
 export function toggleChordMute(chordId: string) {
-    const current = getChordControl(chordId);
-
-    state = {
-        ...state,
-        chords: {
-            ...state.chords,
-            [chordId]: {
-                ...current,
-                mute: !current.mute,
-            },
-        },
-    };
-
-    emit();
+    updateChordControl(chordId, (control) => ({
+        ...control,
+        mute: !control.mute,
+    }));
 }

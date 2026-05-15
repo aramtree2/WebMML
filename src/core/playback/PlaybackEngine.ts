@@ -409,7 +409,7 @@ export const playbackEngine = new PlaybackEngine();
 function defaultInstrumentIdResolver(_wmlInstrument: number): string {
     // Temporary test behavior:
     // Treat every WML instrument id as the default piano instrument.
-    return DEFAULT_INSTRUMENT_ID;
+    return String(_wmlInstrument);
 }
 
 function findEventIndex(events: PlaybackEvent[], time: number): number {

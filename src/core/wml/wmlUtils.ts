@@ -1,4 +1,5 @@
-import type { Chord, WmlProject } from "./wmlTypes";
+import { DEFAULT_INSTRUMENT_ID } from "../virtualInstrument/instrumentRegistry";
+import type { Chord, WmlProject, WmlSection } from "./wmlTypes";
 
 export function createId(prefix: string) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -36,22 +37,81 @@ function isWmlProjectLike(data: any): data is WmlProject {
     );
 }
 
+export function createEmptyChord(): Chord {
+    return {
+        id: createId("chord"),
+        notes: [],
+    };
+}
+
+export function createEmptySection(index: number): WmlSection {
+    return {
+        id: createId("section"),
+        name: `Section ${index + 1}`,
+        instrument: DEFAULT_INSTRUMENT_ID,
+        sustain: [],
+        chords: [createEmptyChord()],
+    };
+}
+
+export function renameSection(
+    project: WmlProject,
+    sectionId: string,
+    name: string
+): WmlProject {
+    const nextName = name.trim();
+
+    if (!nextName) {
+        return project;
+    }
+
+    return {
+        ...project,
+        sections: project.sections.map((section) =>
+            section.id === sectionId
+                ? {
+                      ...section,
+                      name: nextName,
+                  }
+                : section
+        ),
+    };
+}
+
 export function normalizeWmlProject(project: any): WmlProject {
     return {
         ...project,
-        sections: project.sections.map((section: any) => ({
-            ...section,
-            chords: section.chords.map((chord: any): Chord => {
-                if (Array.isArray(chord)) {
-                    return {
-                        id: createId("chord"),
-                        notes: chord,
-                    };
-                }
+        tempos: Array.isArray(project.tempos) ? project.tempos : [],
+        timeSignatures: Array.isArray(project.timeSignatures) ? project.timeSignatures : [],
+        sections: Array.isArray(project.sections)
+            ? project.sections.map((section: any, sectionIndex: number): WmlSection => ({
+                  id: typeof section.id === "string" ? section.id : createId("section"),
+                  name:
+                      typeof section.name === "string"
+                          ? section.name
+                          : `Section ${sectionIndex + 1}`,
+                  instrument:
+                      typeof section.instrument === "string"
+                          ? section.instrument
+                          : DEFAULT_INSTRUMENT_ID,
+                  sustain: Array.isArray(section.sustain) ? section.sustain : [],
+                  chords: Array.isArray(section.chords)
+                      ? section.chords.map((chord: any): Chord => {
+                            if (Array.isArray(chord)) {
+                                return {
+                                    id: createId("chord"),
+                                    notes: chord,
+                                };
+                            }
 
-                return chord;
-            }),
-        })),
+                            return {
+                                id: typeof chord?.id === "string" ? chord.id : createId("chord"),
+                                notes: Array.isArray(chord?.notes) ? chord.notes : [],
+                            };
+                        })
+                      : [],
+              }))
+            : [],
     };
 }
 

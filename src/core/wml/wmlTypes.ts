@@ -33,7 +33,7 @@ export type TimeSignatureEvent = {
 export type WmlSection = {
     id: string;
     name: string;
-    instrument: number;
+    instrument: string;
     sustain: SustainEvent[];
     chords: Chord[];
 };

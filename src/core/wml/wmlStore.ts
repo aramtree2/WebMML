@@ -33,7 +33,7 @@ export function subscribeWmlProject(listener: (p: WmlProject) => void) {
 const STORAGE_KEY = "wml_project";
 
 export function saveWmlProject(project: WmlProject = currentProject) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeWmlProject(project)));
 }
 
 export function loadWmlProject(): WmlProject | null {
