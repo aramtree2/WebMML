@@ -1,5 +1,5 @@
 import { Midi } from "@tonejs/midi";
-import type { WmlProject, WmlSection, Chord, NoteEvent } from "../wml/wmlTypes";
+import type { WmlProject, WmlSection, NoteEvent } from "../wml/wmlTypes";
 import { createId } from "../wml/wmlUtils";
 
 const TARGET_PPQ = 480;
@@ -61,6 +61,26 @@ export function midiToWml(
             options.selectedInstruments?.[trackIndex] ??
             track.instrument.number + 1;
 
+        const notes: NoteEvent[] = track.notes
+            .map((note) => {
+                const tick = Math.round(note.ticks * ratio);
+                let duration = Math.round(note.durationTicks * ratio);
+
+                if (duration <= 0) duration = 1;
+
+                return {
+                    id: createId("note"),
+                    pitch: note.midi,
+                    tick,
+                    duration,
+                    velocity: Math.round(note.velocity * 15),
+                };
+            })
+            .sort((a, b) => {
+                if (a.tick !== b.tick) return a.tick - b.tick;
+                return a.pitch - b.pitch;
+            });
+
         const section: WmlSection = {
             id: createId("section"),
             name: track.name || `track ${trackIndex + 1}`,
@@ -72,48 +92,13 @@ export function midiToWml(
                     value: selectedInstrument === 1 ? 1 : 0,
                 },
             ],
-            chords: [],
-        };
-
-        track.notes.forEach((note) => {
-            const tick = Math.round(note.ticks * ratio);
-            let duration = Math.round(note.durationTicks * ratio);
-
-            if (duration <= 0) duration = 1;
-
-            const noteEvent: NoteEvent = {
-                id: createId("note"),
-                pitch: note.midi,
-                tick,
-                duration,
-                velocity: Math.round(note.velocity * 15),
-            };
-
-            let chord = section.chords.find(
-                (c) => c.notes[0]?.tick === tick
-            );
-
-            if (!chord) {
-                chord = {
+            chords: [
+                {
                     id: createId("chord"),
-                    notes: [],
-                };
-
-                section.chords.push(chord);
-            }
-
-            chord.notes.push(noteEvent);
-        });
-
-        section.chords.sort((a, b) => {
-            const aTick = a.notes[0]?.tick ?? 0;
-            const bTick = b.notes[0]?.tick ?? 0;
-            return aTick - bTick;
-        });
-
-        section.chords.forEach((chord: Chord) => {
-            chord.notes.sort((a, b) => a.pitch - b.pitch);
-        });
+                    notes,
+                },
+            ],
+        };
 
         project.sections.push(section);
     });

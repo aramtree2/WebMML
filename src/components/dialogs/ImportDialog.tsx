@@ -8,6 +8,8 @@ import type { WmlProject } from "../../core/wml/wmlTypes";
 import { midiToWml } from "../../core/parser/midiToWml";
 import { mmlToWml, extractTracksInfo } from "../../core/parser/mmlToWml";
 
+import { getAllInstrumentDefs } from "../../core/virtualInstrument/instrumentRegistry";
+
 import "./ImportDialog.css";
 
 type ImportDialogProps = {
@@ -33,17 +35,19 @@ const MML_EXTS = ["mml", "mmi", "ms2mml", "txt"];
 const MIDI_EXTS = ["mid", "midi"];
 const ALLOWED_EXTS = [...MML_EXTS, ...MIDI_EXTS];
 
-const INSTRUMENTS = [
-    { value: 1, label: "피아노" },
-    { value: 6, label: "일렉트릭 피아노" },
-    { value: 22, label: "아코디언" },
-    { value: 23, label: "하모니카" },
-    { value: 25, label: "기타" },
-    { value: 41, label: "바이올린" },
-    { value: 43, label: "첼로" },
-    { value: 57, label: "트럼펫" },
-    { value: 74, label: "플루트" },
-];
+const REGISTRY_INSTRUMENTS = getAllInstrumentDefs();
+
+const INSTRUMENT_LABELS: Record<string, string> = {
+    SGM_Piano: "피아노",
+    SGM_Violin: "바이올린",
+    SGM_Flute: "플룻",
+};
+
+const INSTRUMENTS = REGISTRY_INSTRUMENTS.map((instrument, index) => ({
+    value: index + 1,
+    label: INSTRUMENT_LABELS[instrument.id] ?? instrument.name,
+    id: instrument.id,
+}));
 
 export function ImportDialog({ onClose }: ImportDialogProps) {
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -67,7 +71,8 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
     const getExt = (fileName: string) =>
         fileName.split(".").pop()?.toLowerCase() ?? "";
 
-    const createNewSectionId = () => Date.now() + Math.floor(Math.random() * 10000);
+    const createNewSectionId = () =>
+        Date.now() + Math.floor(Math.random() * 10000);
 
     const getSectionDisplayNumber = (section: number) => {
         const sectionOrder: number[] = [];
@@ -268,10 +273,10 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             return prev.map((row) =>
                 row.section === target.section
                     ? {
-                        ...row,
-                        section: from.section,
-                        instrument: from.instrument,
-                    }
+                          ...row,
+                          section: from.section,
+                          instrument: from.instrument,
+                      }
                     : row
             );
         });
@@ -337,77 +342,78 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             return prev.map((row) =>
                 row.section === current.section
                     ? {
-                        ...row,
-                        instrument,
-                        originalInstrument: instrument,
-                    }
+                          ...row,
+                          instrument,
+                          originalInstrument: instrument,
+                      }
                     : row
             );
         });
     };
 
     const handleImport = async () => {
-    if (!file) {
-        setError("먼저 파일을 선택하거나 드래그해 주세요.");
-        return;
-    }
-
-    const ext = getExt(file.name);
-
-    try {
-        let wml: WmlProject;
-
-        const instrumentOverrides: number[] = [];
-        tracks.forEach((track) => {
-            instrumentOverrides[track.index] = track.instrument;
-        });
-
-        if (MML_EXTS.includes(ext)) {
-            wml = mmlToWml(fileText, {
-                title: file.name,
-                numerator,
-                denominator,
-                instrumentOverrides,
-            });
-        } else if (MIDI_EXTS.includes(ext)) {
-            if (!fileBuffer) return;
-
-            const selectedInstruments: Record<number, number> = {};
-
-            tracks.forEach((track) => {
-                selectedInstruments[track.index] = track.instrument;
-            });
-
-            wml = midiToWml(fileBuffer, {
-                title: file.name,
-                selectedInstruments,
-            });
-
-            wml.timeSignatures = [
-                {
-                    id: crypto.randomUUID(),
-                    tick: 0,
-                    numerator,
-                    denominator,
-                },
-            ];
-        } else {
-            setError(".mmi, .ms2mml, .txt, .midi, .mid 파일만 가져올 수 있습니다.");
+        if (!file) {
+            setError("먼저 파일을 선택하거나 드래그해 주세요.");
             return;
         }
 
-        setWmlProject(wml);
-        onClose();
-    } catch (err) {
-        console.error(err);
+        const ext = getExt(file.name);
 
-        if (err instanceof Error) {
-            setError(err.message);
-        } else {
-            setError("파일 변환에 실패했습니다.");
+        try {
+            let wml: WmlProject;
+
+            const instrumentOverrides: number[] = [];
+            tracks.forEach((track) => {
+                instrumentOverrides[track.index] = track.instrument;
+            });
+
+            if (MML_EXTS.includes(ext)) {
+                wml = mmlToWml(fileText, {
+                    title: file.name,
+                    numerator,
+                    denominator,
+                    instrumentOverrides,
+                });
+            } else if (MIDI_EXTS.includes(ext)) {
+                if (!fileBuffer) return;
+
+                const selectedInstruments: Record<number, number> = {};
+
+                tracks.forEach((track) => {
+                    selectedInstruments[track.index] = track.instrument;
+                });
+
+                wml = midiToWml(fileBuffer, {
+                    title: file.name,
+                    selectedInstruments,
+                });
+
+                wml.timeSignatures = [
+                    {
+                        id: crypto.randomUUID(),
+                        tick: 0,
+                        numerator,
+                        denominator,
+                    },
+                ];
+            } else {
+                setError(".mmi, .ms2mml, .txt, .midi, .mid 파일만 가져올 수 있습니다.");
+                return;
+            }
+
+            setWmlProject(wml);
+            onClose();
+        } catch (err) {
+            console.error(err);
+
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError("파일 변환에 실패했습니다.");
+            }
         }
-    }
-};
+    };
+
     const selectedTrack =
         instrumentModalIndex !== null
             ? tracks.find((track) => track.index === instrumentModalIndex)
@@ -427,6 +433,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                     onDragLeave={() => setIsDraggingFile(false)}
                 >
                     <strong>파일을 클릭해서 선택하거나 여기에 드래그하세요.</strong>
+
                     <p className="helper-text">
                         지원 형식: .mmi, .ms2mml, .txt, .midi, .mid
                     </p>
@@ -476,8 +483,8 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                         <h3>박자, 악기 설정 창</h3>
 
                         <p className="helper-text">
-                            가운데에 놓으면 섹션이 합쳐지고, 합쳐진 섹션의 트랙을 위/아래로
-                            드래그하면 해당 트랙만 분리됩니다.
+                            가운데에 놓으면 섹션이 합쳐지고, 합쳐진 섹션의 트랙을
+                            위/아래로 드래그하면 해당 트랙만 분리됩니다.
                         </p>
 
                         <table className="track-table">
@@ -493,8 +500,12 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                             <tbody>
                                 {tracks.map((track) => {
                                     const firstInSection =
-                                        tracks.findIndex((t) => t.section === track.section) ===
-                                        tracks.findIndex((t) => t.index === track.index);
+                                        tracks.findIndex(
+                                            (t) => t.section === track.section
+                                        ) ===
+                                        tracks.findIndex(
+                                            (t) => t.index === track.index
+                                        );
 
                                     const preview =
                                         dropPreview?.targetIndex === track.index
@@ -503,7 +514,9 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 
                                     const rowClassName = [
                                         "track-row",
-                                        dragTrackIndex === track.index ? "dragging" : "",
+                                        dragTrackIndex === track.index
+                                            ? "dragging"
+                                            : "",
                                         preview === "before" ? "before" : "",
                                         preview === "after" ? "after" : "",
                                         preview === "merge" ? "merge" : "",
@@ -516,29 +529,61 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                                             key={track.index}
                                             className={rowClassName}
                                             draggable
-                                            onDragStart={() => setDragTrackIndex(track.index)}
-                                            onDragOver={(e) => handleTrackDragOver(e, track.index)}
-                                            onDragLeave={() => setDropPreview(null)}
-                                            onDrop={(e) => handleTrackDrop(e, track.index)}
+                                            onDragStart={() =>
+                                                setDragTrackIndex(track.index)
+                                            }
+                                            onDragOver={(e) =>
+                                                handleTrackDragOver(
+                                                    e,
+                                                    track.index
+                                                )
+                                            }
+                                            onDragLeave={() =>
+                                                setDropPreview(null)
+                                            }
+                                            onDrop={(e) =>
+                                                handleTrackDrop(e, track.index)
+                                            }
                                         >
-                                            <td className={firstInSection ? "section-cell" : ""}>
+                                            <td
+                                                className={
+                                                    firstInSection
+                                                        ? "section-cell"
+                                                        : ""
+                                                }
+                                            >
                                                 {firstInSection &&
-                                                    getSectionDisplayNumber(track.section)}
+                                                    getSectionDisplayNumber(
+                                                        track.section
+                                                    )}
                                             </td>
 
                                             <td
-                                                className={`instrument-cell ${firstInSection ? "section-head" : ""
-                                                    }`}
-                                                onClick={() => setInstrumentModalIndex(track.index)}
+                                                className={`instrument-cell ${
+                                                    firstInSection
+                                                        ? "section-head"
+                                                        : ""
+                                                }`}
+                                                onClick={() =>
+                                                    setInstrumentModalIndex(
+                                                        track.index
+                                                    )
+                                                }
                                             >
                                                 {firstInSection
-                                                    ? getInstrumentName(track.instrument)
+                                                    ? getInstrumentName(
+                                                          track.instrument
+                                                      )
                                                     : ""}
                                             </td>
 
                                             <td>{`track ${track.fixedTrackNumber}`}</td>
 
-                                            <td>{track.eventCount > 0 ? track.eventCount : "-"}</td>
+                                            <td>
+                                                {track.eventCount > 0
+                                                    ? track.eventCount
+                                                    : "-"}
+                                            </td>
                                         </tr>
                                     );
                                 })}
@@ -562,15 +607,21 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 
                             {INSTRUMENTS.map((inst) => (
                                 <button
-                                    key={inst.value}
-                                    className={`instrument-btn ${selectedTrack.instrument === inst.value ? "active" : ""
-                                        }`}
+                                    key={inst.id}
+                                    className={`instrument-btn ${
+                                        selectedTrack.instrument === inst.value
+                                            ? "active"
+                                            : ""
+                                    }`}
                                     onClick={() => {
-                                        changeInstrument(selectedTrack.index, inst.value);
+                                        changeInstrument(
+                                            selectedTrack.index,
+                                            inst.value
+                                        );
                                         setInstrumentModalIndex(null);
                                     }}
                                 >
-                                    [{inst.value}] {inst.label}
+                                    {inst.label}
                                 </button>
                             ))}
                         </div>

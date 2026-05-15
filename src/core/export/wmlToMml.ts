@@ -47,27 +47,45 @@ function pitchToNote(pitch: number): { note: string; octave: number } {
     };
 }
 
-function noteToMML(note: NoteEvent): string {
-    const { note: noteName, octave } = pitchToNote(note.pitch);
 
-    return (
-        "O" +
-        octave +
-        "V" +
-        note.velocity +
-        noteName +
-        getDurationMML(note.duration)
-    );
-}
-
-function chordToMMLParts(chordNotes: NoteEvent[]): string[] {
-    return chordNotes
+function chordToMMLPart(chordNotes: NoteEvent[]): string {
+    const notes = chordNotes
         .slice()
-        .sort((a, b) => a.pitch - b.pitch)
-        .map((note) => {
-            const rest = note.tick > 0 ? restMML(note.tick) : "";
-            return rest + noteToMML(note);
+        .sort((a, b) => {
+            if (a.tick !== b.tick) return a.tick - b.tick;
+            return a.pitch - b.pitch;
         });
+
+    const result: string[] = [];
+
+    let currentTick = 0;
+    let currentOctave = 4;
+    let currentVelocity = 8;
+
+    for (const note of notes) {
+        if (note.tick > currentTick) {
+            result.push(restMML(note.tick - currentTick));
+            currentTick = note.tick;
+        }
+
+        const { note: noteName, octave } = pitchToNote(note.pitch);
+
+        if (octave !== currentOctave) {
+            result.push("O" + octave);
+            currentOctave = octave;
+        }
+
+        if (note.velocity !== currentVelocity) {
+            result.push("V" + note.velocity);
+            currentVelocity = note.velocity;
+        }
+
+        result.push(noteName + getDurationMML(note.duration));
+
+        currentTick = Math.max(currentTick, note.tick + note.duration);
+    }
+
+    return result.join("");
 }
 
 function sectionToMML(section: WmlSection, tempoEvents: TempoEvent[]): string {
@@ -95,12 +113,8 @@ function sectionToMML(section: WmlSection, tempoEvents: TempoEvent[]): string {
             return aTick - bTick;
         })
         .forEach((chord, chordIndex) => {
-            const chordParts = chordToMMLParts(chord.notes);
-
-            chordParts.forEach((part) => {
-                const prefix = chordIndex === 0 ? tempoPrefix + sustainPrefix : "";
-                parts.push(prefix + part);
-            });
+            const prefix = chordIndex === 0 ? tempoPrefix + sustainPrefix : "";
+            parts.push(prefix + chordToMMLPart(chord.notes));
         });
 
     return parts.join(",");

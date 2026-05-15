@@ -115,8 +115,6 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
         const exportWml = makeSelectedWml(normalizedWml, selectedKeys);
         const title = getSafeFileName(wml.title || "exported_music");
 
-        console.log("export sections:", exportWml.sections.length);
-
         if (exportType === "mml") {
             const mmlText = wmlToMml(exportWml);
             downloadTextFile(mmlText, `${title}.txt`);
@@ -145,7 +143,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
                                         <th>트랙 이름</th>
                                         <th>악기</th>
                                         <th>파트</th>
-                                        <th>문자 수</th>
+                                        <th>개수</th>
                                     </tr>
                                 </thead>
 
@@ -247,6 +245,10 @@ function SectionRows({
     onToggleSection,
     onToggleChord,
 }: SectionRowsProps) {
+    const totalNoteCount = section.chords.reduce((sum: number, chord: any) => {
+        return sum + getChordNoteCount(chord);
+    }, 0);
+
     return (
         <>
             <tr className="export-section-row">
@@ -279,7 +281,7 @@ function SectionRows({
 
                 <td>{section.instrument ?? 1}</td>
                 <td>섹션</td>
-                <td>{section.chords.length}</td>
+                <td>{section.chords.length}화음 / {totalNoteCount}노트</td>
             </tr>
 
             {isOpen &&
@@ -302,7 +304,7 @@ function SectionRows({
                             <td></td>
                             <td></td>
                             <td>화음{chordIndex + 1}</td>
-                            <td>{JSON.stringify(chord).length}</td>
+                            <td>{getChordNoteCount(chord)}노트</td>
                         </tr>
                     );
                 })}
@@ -348,6 +350,18 @@ function normalizeChords(chords: any[]) {
             notes: [chord],
         };
     });
+}
+
+function getChordNoteCount(chord: any) {
+    if (chord && Array.isArray(chord.notes)) {
+        return chord.notes.length;
+    }
+
+    if (Array.isArray(chord)) {
+        return chord.length;
+    }
+
+    return 0;
 }
 
 function makeSelectedWml(wml: any, selectedKeys: string[]) {
