@@ -6,7 +6,7 @@ const TARGET_PPQ = 480;
 
 type MidiToWmlOptions = {
     title?: string;
-    selectedInstruments?: Record<number, number>;
+    selectedInstruments?: Record<number, string | number>;
 };
 
 export function midiToWml(
@@ -57,9 +57,10 @@ export function midiToWml(
     }
 
     midi.tracks.forEach((track, trackIndex) => {
-        const selectedInstrument =
+        const selectedInstrument = String(
             options.selectedInstruments?.[trackIndex] ??
-            track.instrument.number + 1;
+                track.instrument.number + 1
+        );
 
         const notes: NoteEvent[] = track.notes
             .map((note) => {
@@ -89,7 +90,7 @@ export function midiToWml(
                 {
                     id: createId("sustain"),
                     tick: 0,
-                    value: selectedInstrument === 1 ? 1 : 0,
+                    value: selectedInstrument === "1" ? 1 : 0,
                 },
             ],
             chords: [

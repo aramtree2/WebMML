@@ -25,9 +25,14 @@ export function updateWmlProject(
     setWmlProject(updater(currentProject), options);
 }
 
-export function subscribeWmlProject(listener: (p: WmlProject) => void) {
+export function subscribeWmlProject(
+    listener: (project: WmlProject) => void
+) {
     listeners.add(listener);
-    return () => listeners.delete(listener);
+
+    return () => {
+        listeners.delete(listener);
+    };
 }
 
 const STORAGE_KEY = "wml_project";

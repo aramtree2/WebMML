@@ -47,12 +47,12 @@ type ParsedSustain = {
 
 type RawTrack = {
     mmlParts: string[];
-    instrument: number;
+    instrument: string;
 };
 
 type TrackInfo = {
     index: number;
-    defaultInstrument: number;
+    defaultInstrument: string;
 };
 
 type ParsedMMLPart = {
@@ -68,7 +68,7 @@ type MS2Data = {
 
 type MmlToWmlOptions = {
     title?: string;
-    instrumentOverrides?: number[] | null;
+    instrumentOverrides?: Array<string | number> | null;
     numerator?: number;
     denominator?: number;
 };
@@ -105,7 +105,7 @@ function extractMMITracks(content: string): RawTrack[] {
 
         tracks.push({
             mmlParts: parts,
-            instrument: 1,
+            instrument: "1",
         });
     }
 
@@ -119,7 +119,7 @@ function extractTextTracks(content: string): RawTrack[] {
     return [
         {
             mmlParts: splitMMLParts(mml),
-            instrument: 1,
+            instrument: "1",
         },
     ];
 }
@@ -140,7 +140,7 @@ function extractMS2Data(content: string): MS2Data {
     while ((m = chordRegex.exec(content)) !== null) {
         chordTracks.push({
             mmlParts: [cleanMML(m[2])],
-            instrument: 1,
+            instrument: "1",
         });
     }
 
@@ -165,14 +165,14 @@ export function extractTracksInfo(content: string): TrackInfo[] {
         return [
             {
                 index: 0,
-                defaultInstrument: 1,
+                defaultInstrument: "1",
             },
         ];
     }
 
     return extractTracks(content).map((track, i) => ({
         index: i,
-        defaultInstrument: track.instrument ?? 1,
+        defaultInstrument: track.instrument ?? "1",
     }));
 }
 
@@ -278,7 +278,13 @@ function parseSingleMMLPart(mml: string): ParsedMMLPart {
         }
 
         if (head === "L") {
-            defaultLen = clampCommandValue("L", Number(token.slice(1)));
+            const lenOnly = token.match(/[0-9]+/)?.[0];
+
+            if (!lenOnly) {
+                throw new MMLParseError(`Invalid default length: ${token}`);
+            }
+
+            defaultLen = clampCommandValue("L", Number(lenOnly));
             defaultDots = (token.match(/\./g) || []).length;
             continue;
         }
@@ -510,8 +516,8 @@ function convertMS2ContentToWML(
     const instrument =
         Array.isArray(options.instrumentOverrides) &&
         options.instrumentOverrides[0] != null
-            ? Number(options.instrumentOverrides[0])
-            : 1;
+            ? String(options.instrumentOverrides[0])
+            : "1";
 
     const tempos = [...parsed.tempoEvents];
 
@@ -573,8 +579,8 @@ export function mmlToWml(
         const instrument =
             Array.isArray(options.instrumentOverrides) &&
             options.instrumentOverrides[i] != null
-                ? Number(options.instrumentOverrides[i])
-                : track.instrument ?? 1;
+                ? String(options.instrumentOverrides[i])
+                : track.instrument ?? "1";
 
         const parsed = mmlPartsToChords(track.mmlParts);
 

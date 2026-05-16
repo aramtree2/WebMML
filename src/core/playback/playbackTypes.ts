@@ -5,7 +5,7 @@ export type PlaybackNoteOnEvent = {
     type: "noteOn";
     sectionId: string;
     noteId: string;
-    wmlInstrument: number;
+    wmlInstrument: string;
     tick: number;
     time: number;
     pitch: number;
@@ -17,7 +17,7 @@ export type PlaybackNoteOffEvent = {
     type: "noteOff";
     sectionId: string;
     noteId: string;
-    wmlInstrument: number;
+    wmlInstrument: string;
     tick: number;
     time: number;
     pitch: number;
@@ -67,4 +67,4 @@ export type InstrumentPlayerFactory = (
     instrumentId: string
 ) => Promise<InstrumentPlayer>;
 
-export type InstrumentIdResolver = (wmlInstrument: number) => string;
+export type InstrumentIdResolver = (wmlInstrument: string) => string;

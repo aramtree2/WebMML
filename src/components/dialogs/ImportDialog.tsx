@@ -21,8 +21,8 @@ type TrackRow = {
     fixedTrackNumber: number;
     name: string;
     eventCount: number;
-    instrument: number;
-    originalInstrument: number;
+    instrument: string;
+    originalInstrument: string;
     section: number;
 };
 
@@ -44,7 +44,7 @@ const INSTRUMENT_LABELS: Record<string, string> = {
 };
 
 const INSTRUMENTS = REGISTRY_INSTRUMENTS.map((instrument, index) => ({
-    value: index + 1,
+    value: String(index + 1),
     label: INSTRUMENT_LABELS[instrument.id] ?? instrument.name,
     id: instrument.id,
 }));
@@ -111,8 +111,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 
                 const rows: TrackRow[] = midi.tracks
                     .map((track, index) => {
-                        const inst = track.instrument.number + 1;
-
+                        const inst =  String(track.instrument.number + 1);
                         return {
                             index,
                             fixedTrackNumber: index + 1,
@@ -334,7 +333,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
         setDragTrackIndex(null);
     };
 
-    const changeInstrument = (trackIndex: number, instrument: number) => {
+    const changeInstrument = (trackIndex: number, instrument: string) => {
         setTracks((prev) => {
             const current = prev.find((row) => row.index === trackIndex);
             if (!current) return prev;
@@ -362,7 +361,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
         try {
             let wml: WmlProject;
 
-            const instrumentOverrides: number[] = [];
+            const instrumentOverrides: string[] = [];
             tracks.forEach((track) => {
                 instrumentOverrides[track.index] = track.instrument;
             });
@@ -377,7 +376,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             } else if (MIDI_EXTS.includes(ext)) {
                 if (!fileBuffer) return;
 
-                const selectedInstruments: Record<number, number> = {};
+                const selectedInstruments: Record<number, string> = {};
 
                 tracks.forEach((track) => {
                     selectedInstruments[track.index] = track.instrument;
@@ -632,7 +631,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
     );
 }
 
-function getInstrumentName(value: number) {
+function getInstrumentName(value: string) {
     return (
         INSTRUMENTS.find((instrument) => instrument.value === value)?.label ??
         `악기 ${value}`

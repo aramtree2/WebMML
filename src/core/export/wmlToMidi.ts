@@ -2,8 +2,18 @@ import { Midi } from "@tonejs/midi";
 import type { WmlProject, NoteEvent } from "../wml/wmlTypes";
 
 type WmlToMidiOptions = {
-    selectedInstruments?: Record<number, number>;
+    selectedInstruments?: Record<number, string | number>;
 };
+
+function normalizeInstrument(value: string | number | undefined): number {
+    const num = Number(value);
+
+    if (!Number.isFinite(num)) {
+        return 1;
+    }
+
+    return Math.max(1, Math.min(128, Math.round(num)));
+}
 
 export function wmlToMidi(
     wml: WmlProject,
@@ -28,12 +38,15 @@ export function wmlToMidi(
     wml.sections.forEach((section, sectionIndex) => {
         const track = midi.addTrack();
 
-        const instrument =
-            options.selectedInstruments?.[sectionIndex] ?? section.instrument;
+        const instrument = normalizeInstrument(
+            options.selectedInstruments?.[sectionIndex] ?? section.instrument
+        );
 
-        track.instrument.number = Math.max(0, Math.min(127, instrument - 1));
+        track.instrument.number = instrument - 1;
 
-        const notes: NoteEvent[] = section.chords.flatMap((chord) => chord.notes);
+        const notes: NoteEvent[] = section.chords.flatMap(
+            (chord) => chord.notes
+        );
 
         notes.forEach((note) => {
             track.addNote({
@@ -47,4 +60,3 @@ export function wmlToMidi(
 
     return midi;
 }
-

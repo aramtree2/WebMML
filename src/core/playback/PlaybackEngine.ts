@@ -1,6 +1,7 @@
 import { createInstrumentPlayer, DEFAULT_INSTRUMENT_ID } from "../virtualInstrument";
 import { getWmlProject, subscribeWmlProject } from "../wml/wmlStore";
 import { buildPlaybackTimeline } from "./buildPlaybackTimeline";
+import { getAllInstrumentDefs } from "../virtualInstrument/instrumentRegistry";
 import type {
     InstrumentIdResolver,
     InstrumentPlayer,
@@ -11,6 +12,7 @@ import type {
     PlaybackState,
     PlaybackTimeline,
 } from "./playbackTypes";
+
 
 export type PlaybackEngineOptions = {
     lookAheadSeconds?: number;
@@ -406,12 +408,12 @@ export class PlaybackEngine {
 
 export const playbackEngine = new PlaybackEngine();
 
-function defaultInstrumentIdResolver(_wmlInstrument: number): string {
-    // Temporary test behavior:
-    // Treat every WML instrument id as the default piano instrument.
-    return String(_wmlInstrument);
-}
+function defaultInstrumentIdResolver(wmlInstrument: string): string {
+    const index = Number(wmlInstrument) - 1;
+    const instruments = getAllInstrumentDefs();
 
+    return instruments[index]?.id ?? DEFAULT_INSTRUMENT_ID;
+}
 function findEventIndex(events: PlaybackEvent[], time: number): number {
     let low = 0;
     let high = events.length;

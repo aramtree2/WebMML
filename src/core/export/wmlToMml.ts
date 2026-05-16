@@ -180,3 +180,4 @@ function restMML(tick: number): string {
         .map((duration) => "R" + duration)
         .join("");
 }
+
