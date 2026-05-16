@@ -8,7 +8,16 @@ import type { WmlProject } from "../../core/wml/wmlTypes";
 import { midiToWml } from "../../core/parser/midiToWml";
 import { mmlToWml, extractTracksInfo } from "../../core/parser/mmlToWml";
 
-import { getAllInstrumentDefs } from "../../core/virtualInstrument/instrumentRegistry";
+import {
+    DEFAULT_INSTRUMENT_ID,
+    getAllInstrumentDefs,
+} from "../../core/virtualInstrument/instrumentRegistry";
+
+import {
+    INSTRUMENT_LABELS,
+    MIDI_PROGRAM_TO_INSTRUMENT_ID,
+    INSTRUMENT_ID_TO_MIDI_PROGRAM
+} from "../../core/parser/instrumentMappings";
 
 import "./ImportDialog.css";
 
@@ -37,17 +46,28 @@ const ALLOWED_EXTS = [...MML_EXTS, ...MIDI_EXTS];
 
 const REGISTRY_INSTRUMENTS = getAllInstrumentDefs();
 
-const INSTRUMENT_LABELS: Record<string, string> = {
-    SGM_Piano: "피아노",
-    SGM_Violin: "바이올린",
-    SGM_Flute: "플룻",
-};
-
-const INSTRUMENTS = REGISTRY_INSTRUMENTS.map((instrument, index) => ({
-    value: String(index + 1),
+const INSTRUMENTS = REGISTRY_INSTRUMENTS.map((instrument) => ({
+    value: String(INSTRUMENT_ID_TO_MIDI_PROGRAM[instrument.id] ?? 1),
     label: INSTRUMENT_LABELS[instrument.id] ?? instrument.name,
     id: instrument.id,
 }));
+
+function getInstrumentValueById(id: string): string | undefined {
+    return INSTRUMENTS.find((instrument) => instrument.id === id)?.value;
+}
+
+const DEFAULT_INSTRUMENT_VALUE =
+    getInstrumentValueById(DEFAULT_INSTRUMENT_ID) ?? "1";
+
+function getInstrumentValueFromMidiProgram(programNumber: number): string {
+    const instrumentId = MIDI_PROGRAM_TO_INSTRUMENT_ID[programNumber];
+
+    if (!instrumentId) {
+        return DEFAULT_INSTRUMENT_VALUE;
+    }
+
+    return getInstrumentValueById(instrumentId) ?? DEFAULT_INSTRUMENT_VALUE;
+}
 
 export function ImportDialog({ onClose }: ImportDialogProps) {
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -111,7 +131,10 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 
                 const rows: TrackRow[] = midi.tracks
                     .map((track, index) => {
-                        const inst =  String(track.instrument.number + 1);
+                        const midiProgramNumber = track.instrument.number + 1;
+                        const inst =
+                            getInstrumentValueFromMidiProgram(midiProgramNumber);
+
                         return {
                             index,
                             fixedTrackNumber: index + 1,

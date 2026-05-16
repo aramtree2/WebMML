@@ -231,7 +231,7 @@ function getDurationTick(len: number, dots: number): number {
         add /= 2;
     }
 
-    return Math.max(1, Math.round(((TPQN * 4) / len) * mul));
+    return ((TPQN * 4) / len) * mul;
 }
 
 function parseSingleMMLPart(mml: string): ParsedMMLPart {
@@ -263,7 +263,7 @@ function parseSingleMMLPart(mml: string): ParsedMMLPart {
 
         if (head === "T") {
             const bpm = clampCommandValue("T", Number(token.slice(1)));
-            tempoEvents.push({ tick: time, bpm });
+            tempoEvents.push({ tick: Math.round(time), bpm });
             continue;
         }
 
@@ -297,7 +297,7 @@ function parseSingleMMLPart(mml: string): ParsedMMLPart {
             }
 
             sustainEvents.push({
-                tick: time,
+                tick: Math.round(time),
                 value: sValue,
             });
             continue;
@@ -321,19 +321,27 @@ function parseSingleMMLPart(mml: string): ParsedMMLPart {
             lenMatch ? Number(lenMatch[0]) : defaultLen
         );
 
-        let dots = isAbsoluteNote
-            ? defaultDots
-            : (token.match(/\./g) || []).length;
+        const explicitDots = (token.match(/\./g) || []).length;
 
-        if (!lenMatch) {
+        let dots: number;
+
+        if (isAbsoluteNote) {
             dots = defaultDots;
+        } else if (lenMatch) {
+            dots = explicitDots;
+        } else {
+            dots = explicitDots > 0 ? explicitDots : defaultDots;
         }
 
-        const duration = getDurationTick(len, dots);
-        const tick = time;
+        const durationFloat = getDurationTick(len, dots);
+        const startTime = time;
+        const endTime = time + durationFloat;
+
+        const tick = Math.round(startTime);
+        const duration = Math.max(1, Math.round(endTime) - Math.round(startTime));
 
         if (head === "R") {
-            time += duration;
+            time = endTime;
             lastNote = null;
             tie = false;
             continue;
@@ -342,8 +350,8 @@ function parseSingleMMLPart(mml: string): ParsedMMLPart {
         let pitch = isAbsoluteNote
             ? clampCommandValue("N", Number(token.slice(1)))
             : getNoteNumber(head, octave) +
-              (token.includes("+") || token.includes("#") ? 1 : 0) -
-              (token.includes("-") ? 1 : 0);
+            (token.includes("+") || token.includes("#") ? 1 : 0) -
+            (token.includes("-") ? 1 : 0);
 
         pitch = clamp(pitch, 0, 127);
 
@@ -354,7 +362,10 @@ function parseSingleMMLPart(mml: string): ParsedMMLPart {
                 throw new MMLParseError("Tie mismatch");
             }
 
-            lastNote.duration += duration;
+            lastNote.duration = Math.max(
+                1,
+                Math.round(endTime) - lastNote.tick
+            );
         } else {
             lastNote = {
                 pitch,
@@ -366,7 +377,7 @@ function parseSingleMMLPart(mml: string): ParsedMMLPart {
             notes.push(lastNote);
         }
 
-        time += duration;
+        time = endTime;
         tie = false;
     }
 
@@ -515,7 +526,7 @@ function convertMS2ContentToWML(
 
     const instrument =
         Array.isArray(options.instrumentOverrides) &&
-        options.instrumentOverrides[0] != null
+            options.instrumentOverrides[0] != null
             ? String(options.instrumentOverrides[0])
             : "1";
 
@@ -578,7 +589,7 @@ export function mmlToWml(
     tracks.forEach((track, i) => {
         const instrument =
             Array.isArray(options.instrumentOverrides) &&
-            options.instrumentOverrides[i] != null
+                options.instrumentOverrides[i] != null
                 ? String(options.instrumentOverrides[i])
                 : track.instrument ?? "1";
 

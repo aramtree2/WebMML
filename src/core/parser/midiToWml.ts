@@ -1,5 +1,5 @@
 import { Midi } from "@tonejs/midi";
-import type { WmlProject, WmlSection, NoteEvent } from "../wml/wmlTypes";
+import type { WmlProject, WmlSection, NoteEvent, Chord } from "../wml/wmlTypes";
 import { createId } from "../wml/wmlUtils";
 
 const TARGET_PPQ = 480;
@@ -7,6 +7,11 @@ const TARGET_PPQ = 480;
 type MidiToWmlOptions = {
     title?: string;
     selectedInstruments?: Record<number, string | number>;
+};
+
+type Voice = {
+    notes: NoteEvent[];
+    lastEndTick: number;
 };
 
 export function midiToWml(
@@ -82,9 +87,13 @@ export function midiToWml(
                 return a.pitch - b.pitch;
             });
 
+        if (notes.length === 0) return;
+
+        const chords = splitMidiNotesToChords(notes);
+
         const section: WmlSection = {
             id: createId("section"),
-            name: track.name || `track ${trackIndex + 1}`,
+            name: track.name || `Track${trackIndex + 1}`,
             instrument: selectedInstrument,
             sustain: [
                 {
@@ -93,16 +102,42 @@ export function midiToWml(
                     value: selectedInstrument === "1" ? 1 : 0,
                 },
             ],
-            chords: [
-                {
-                    id: createId("chord"),
-                    notes,
-                },
-            ],
+            chords,
         };
 
         project.sections.push(section);
     });
 
     return project;
+}
+
+function splitMidiNotesToChords(notes: NoteEvent[]): Chord[] {
+    const voices: Voice[] = [];
+
+    for (const note of notes) {
+        const startTick = note.tick;
+        const endTick = note.tick + note.duration;
+
+        let targetVoice = voices.find((voice) => voice.lastEndTick <= startTick);
+
+        if (!targetVoice) {
+            targetVoice = {
+                notes: [],
+                lastEndTick: 0,
+            };
+
+            voices.push(targetVoice);
+        }
+
+        targetVoice.notes.push(note);
+        targetVoice.lastEndTick = Math.max(targetVoice.lastEndTick, endTick);
+    }
+
+    return voices.map((voice) => ({
+        id: createId("chord"),
+        notes: voice.notes.sort((a, b) => {
+            if (a.tick !== b.tick) return a.tick - b.tick;
+            return a.pitch - b.pitch;
+        }),
+    }));
 }
