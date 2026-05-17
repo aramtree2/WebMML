@@ -4,7 +4,8 @@ import { DialogFrame } from "./DialogFrame";
 import { getWmlProject } from "../../core/wml/wmlStore";
 import { wmlToMml } from "../../core/export/wmlToMml";
 import { wmlToMidi } from "../../core/export/wmlToMidi";
-
+import { DEFAULT_INSTRUMENT_ID } from "../../core/virtualInstrument/instrumentRegistry";
+import { INSTRUMENT_LABELS } from "../../core/parser/instrumentMappings";
 import "./ExportDialog.css";
 
 type ExportDialogProps = {
@@ -276,10 +277,11 @@ function SectionRows({
                     {section.name ||
                         section.trackName ||
                         section.title ||
-                        `Instrument ${section.instrument ?? 1}`}
+                        `Section ${sectionIndex + 1}`}
                 </td>
 
-                <td>{section.instrument ?? 1}</td>
+                <td>{getInstrumentLabel(section.instrument)}</td>
+
                 <td>섹션</td>
                 <td>{section.chords.length}화음 / {totalNoteCount}노트</td>
             </tr>
@@ -323,7 +325,7 @@ function normalizeWmlForExport(wml: any) {
         tempos: wml?.tempos ?? wml?.Tempo ?? [],
         sections: (wml?.sections ?? wml?.Sections ?? []).map((section: any) => ({
             ...section,
-            instrument: section.instrument ?? 1,
+            instrument: section.instrument ?? DEFAULT_INSTRUMENT_ID,
             sustain: section.sustain ?? section.Sustain ?? [],
             chords: normalizeChords(section.chords ?? section.Chords ?? []),
         })),
@@ -410,4 +412,9 @@ function downloadBlob(blob: Blob, filename: string) {
 
 function getSafeFileName(filename: string) {
     return filename.replace(/[\\/:*?"<>|]/g, "_");
+}
+
+function getInstrumentLabel(instrumentId: string | undefined) {
+    const id = instrumentId ?? DEFAULT_INSTRUMENT_ID;
+    return INSTRUMENT_LABELS[id] ?? id;
 }

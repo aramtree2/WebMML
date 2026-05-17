@@ -1,10 +1,15 @@
 import { Midi } from "@tonejs/midi";
 import type { WmlProject, NoteEvent } from "../wml/wmlTypes";
 
+import { DEFAULT_INSTRUMENT_ID } from "../virtualInstrument/instrumentRegistry";
 import { INSTRUMENT_ID_TO_MIDI_PROGRAM } from "../parser/instrumentMappings";
+
 type WmlToMidiOptions = {
     selectedInstruments?: Record<number, string | number>;
 };
+
+const DEFAULT_MIDI_PROGRAM =
+    INSTRUMENT_ID_TO_MIDI_PROGRAM[DEFAULT_INSTRUMENT_ID] ?? 1;
 
 function normalizeInstrument(value: string | number | undefined): number {
     if (typeof value === "string") {
@@ -18,7 +23,7 @@ function normalizeInstrument(value: string | number | undefined): number {
     const num = Number(value);
 
     if (!Number.isFinite(num)) {
-        return 1;
+        return DEFAULT_MIDI_PROGRAM;
     }
 
     return Math.max(1, Math.min(128, Math.round(num)));

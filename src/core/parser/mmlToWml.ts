@@ -7,7 +7,7 @@ import type {
 } from "../wml/wmlTypes";
 
 import { createId } from "../wml/wmlUtils";
-
+import { DEFAULT_INSTRUMENT_ID } from "../virtualInstrument/instrumentRegistry";
 const TPQN = 480;
 
 export class MMLParseError extends Error {
@@ -105,7 +105,7 @@ function extractMMITracks(content: string): RawTrack[] {
 
         tracks.push({
             mmlParts: parts,
-            instrument: "1",
+            instrument: DEFAULT_INSTRUMENT_ID,
         });
     }
 
@@ -119,7 +119,7 @@ function extractTextTracks(content: string): RawTrack[] {
     return [
         {
             mmlParts: splitMMLParts(mml),
-            instrument: "1",
+            instrument: DEFAULT_INSTRUMENT_ID,
         },
     ];
 }
@@ -140,7 +140,7 @@ function extractMS2Data(content: string): MS2Data {
     while ((m = chordRegex.exec(content)) !== null) {
         chordTracks.push({
             mmlParts: [cleanMML(m[2])],
-            instrument: "1",
+            instrument: DEFAULT_INSTRUMENT_ID,
         });
     }
 
@@ -165,14 +165,14 @@ export function extractTracksInfo(content: string): TrackInfo[] {
         return [
             {
                 index: 0,
-                defaultInstrument: "1",
+                defaultInstrument: DEFAULT_INSTRUMENT_ID,
             },
         ];
     }
 
     return extractTracks(content).map((track, i) => ({
         index: i,
-        defaultInstrument: track.instrument ?? "1",
+        defaultInstrument: track.instrument ?? DEFAULT_INSTRUMENT_ID,
     }));
 }
 
@@ -528,7 +528,7 @@ function convertMS2ContentToWML(
         Array.isArray(options.instrumentOverrides) &&
             options.instrumentOverrides[0] != null
             ? String(options.instrumentOverrides[0])
-            : "1";
+            : DEFAULT_INSTRUMENT_ID;
 
     const tempos = [...parsed.tempoEvents];
 
@@ -591,7 +591,7 @@ export function mmlToWml(
             Array.isArray(options.instrumentOverrides) &&
                 options.instrumentOverrides[i] != null
                 ? String(options.instrumentOverrides[i])
-                : track.instrument ?? "1";
+                : track.instrument ?? DEFAULT_INSTRUMENT_ID;
 
         const parsed = mmlPartsToChords(track.mmlParts);
 

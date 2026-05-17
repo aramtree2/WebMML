@@ -2,6 +2,12 @@ import { Midi } from "@tonejs/midi";
 import type { WmlProject, WmlSection, NoteEvent, Chord } from "../wml/wmlTypes";
 import { createId } from "../wml/wmlUtils";
 
+import { DEFAULT_INSTRUMENT_ID } from "../virtualInstrument/instrumentRegistry";
+import {
+    MIDI_PROGRAM_TO_INSTRUMENT_ID,
+    INSTRUMENT_ID_TO_MIDI_PROGRAM,
+} from "./instrumentMappings";
+
 const TARGET_PPQ = 480;
 
 type MidiToWmlOptions = {
@@ -13,6 +19,36 @@ type Voice = {
     notes: NoteEvent[];
     lastEndTick: number;
 };
+
+function normalizeInstrumentId(value: string | number | undefined): string {
+    if (value === undefined || value === null) {
+        return DEFAULT_INSTRUMENT_ID;
+    }
+
+    const stringValue = String(value);
+
+    if (INSTRUMENT_ID_TO_MIDI_PROGRAM[stringValue] !== undefined) {
+        return stringValue;
+    }
+
+    const midiProgramNumber = Number(stringValue);
+
+    if (Number.isFinite(midiProgramNumber)) {
+        return (
+            MIDI_PROGRAM_TO_INSTRUMENT_ID[Math.round(midiProgramNumber)] ??
+            DEFAULT_INSTRUMENT_ID
+        );
+    }
+
+    return DEFAULT_INSTRUMENT_ID;
+}
+
+function getInstrumentIdFromMidiProgram(programNumber: number): string {
+    return (
+        MIDI_PROGRAM_TO_INSTRUMENT_ID[programNumber] ??
+        DEFAULT_INSTRUMENT_ID
+    );
+}
 
 export function midiToWml(
     arrayBuffer: ArrayBuffer,
@@ -62,9 +98,11 @@ export function midiToWml(
     }
 
     midi.tracks.forEach((track, trackIndex) => {
-        const selectedInstrument = String(
+        const midiProgramNumber = track.instrument.number + 1;
+
+        const selectedInstrument = normalizeInstrumentId(
             options.selectedInstruments?.[trackIndex] ??
-                track.instrument.number + 1
+                getInstrumentIdFromMidiProgram(midiProgramNumber)
         );
 
         const notes: NoteEvent[] = track.notes
@@ -99,7 +137,7 @@ export function midiToWml(
                 {
                     id: createId("sustain"),
                     tick: 0,
-                    value: selectedInstrument === "1" ? 1 : 0,
+                    value: selectedInstrument === DEFAULT_INSTRUMENT_ID ? 1 : 0,
                 },
             ],
             chords,

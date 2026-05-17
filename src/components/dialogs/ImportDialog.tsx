@@ -16,7 +16,6 @@ import {
 import {
     INSTRUMENT_LABELS,
     MIDI_PROGRAM_TO_INSTRUMENT_ID,
-    INSTRUMENT_ID_TO_MIDI_PROGRAM
 } from "../../core/parser/instrumentMappings";
 
 import "./ImportDialog.css";
@@ -47,26 +46,48 @@ const ALLOWED_EXTS = [...MML_EXTS, ...MIDI_EXTS];
 const REGISTRY_INSTRUMENTS = getAllInstrumentDefs();
 
 const INSTRUMENTS = REGISTRY_INSTRUMENTS.map((instrument) => ({
-    value: String(INSTRUMENT_ID_TO_MIDI_PROGRAM[instrument.id] ?? 1),
+    value: instrument.id,
     label: INSTRUMENT_LABELS[instrument.id] ?? instrument.name,
     id: instrument.id,
 }));
 
-function getInstrumentValueById(id: string): string | undefined {
-    return INSTRUMENTS.find((instrument) => instrument.id === id)?.value;
+function isRegisteredInstrumentId(id: string): boolean {
+    return INSTRUMENTS.some((instrument) => instrument.id === id);
 }
 
-const DEFAULT_INSTRUMENT_VALUE =
-    getInstrumentValueById(DEFAULT_INSTRUMENT_ID) ?? "1";
-
-function getInstrumentValueFromMidiProgram(programNumber: number): string {
-    const instrumentId = MIDI_PROGRAM_TO_INSTRUMENT_ID[programNumber];
-
-    if (!instrumentId) {
-        return DEFAULT_INSTRUMENT_VALUE;
+function normalizeInstrumentId(value: string | number | undefined): string {
+    if (value === undefined || value === null) {
+        return DEFAULT_INSTRUMENT_ID;
     }
 
-    return getInstrumentValueById(instrumentId) ?? DEFAULT_INSTRUMENT_VALUE;
+    const stringValue = String(value);
+
+    if (isRegisteredInstrumentId(stringValue)) {
+        return stringValue;
+    }
+
+    const midiProgramNumber = Number(stringValue);
+
+    if (Number.isFinite(midiProgramNumber)) {
+        const instrumentId =
+            MIDI_PROGRAM_TO_INSTRUMENT_ID[Math.round(midiProgramNumber)];
+
+        if (instrumentId && isRegisteredInstrumentId(instrumentId)) {
+            return instrumentId;
+        }
+    }
+
+    return DEFAULT_INSTRUMENT_ID;
+}
+
+function getInstrumentIdFromMidiProgram(programNumber: number): string {
+    const instrumentId = MIDI_PROGRAM_TO_INSTRUMENT_ID[programNumber];
+
+    if (instrumentId && isRegisteredInstrumentId(instrumentId)) {
+        return instrumentId;
+    }
+
+    return DEFAULT_INSTRUMENT_ID;
 }
 
 export function ImportDialog({ onClose }: ImportDialogProps) {
@@ -133,7 +154,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                     .map((track, index) => {
                         const midiProgramNumber = track.instrument.number + 1;
                         const inst =
-                            getInstrumentValueFromMidiProgram(midiProgramNumber);
+                            getInstrumentIdFromMidiProgram(midiProgramNumber);
 
                         return {
                             index,
@@ -154,15 +175,19 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
 
                 const infos = extractTracksInfo(text);
 
-                const rows: TrackRow[] = infos.map((info, i) => ({
-                    index: info.index,
-                    fixedTrackNumber: i + 1,
-                    name: `track ${i + 1}`,
-                    eventCount: 0,
-                    instrument: info.defaultInstrument,
-                    originalInstrument: info.defaultInstrument,
-                    section: i + 1,
-                }));
+                const rows: TrackRow[] = infos.map((info, i) => {
+                    const inst = normalizeInstrumentId(info.defaultInstrument);
+
+                    return {
+                        index: info.index,
+                        fixedTrackNumber: i + 1,
+                        name: `track ${i + 1}`,
+                        eventCount: 0,
+                        instrument: inst,
+                        originalInstrument: inst,
+                        section: i + 1,
+                    };
+                });
 
                 setTracks(rows);
             }
