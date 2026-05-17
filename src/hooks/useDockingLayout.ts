@@ -42,6 +42,10 @@ export function useDockingLayout(initialState: EditorLayoutState) {
         ...collectPanelIds(mainLayout),
         ...floating.flatMap((win) => collectPanelIds(win.layout)),
     ].filter((panelId) => !hiddenPanelIds.has(panelId)));
+    const layoutPanelIds = new Set([
+        ...collectPanelIds(mainLayout),
+        ...floating.flatMap((win) => collectPanelIds(win.layout)),
+    ]);
     const visiblePanelCount = visiblePanelIds.size;
 
     const canHidePanel = (panelId: string) => {
@@ -62,6 +66,12 @@ export function useDockingLayout(initialState: EditorLayoutState) {
     };
 
     const showPanel = (panelId: string) => {
+        if (!layoutPanelIds.has(panelId)) {
+            const incoming: LayoutNode = { type: "tabs", ids: [panelId], activeId: panelId };
+
+            setMainLayout((prev) => wrapLayoutByEdge(prev, incoming, "right"));
+        }
+
         setHiddenPanelIds((prev) => {
             const next = new Set(prev);
             next.delete(panelId);
@@ -70,12 +80,12 @@ export function useDockingLayout(initialState: EditorLayoutState) {
     };
 
     const togglePanelVisibility = (panelId: string) => {
-        if (hiddenPanelIds.has(panelId)) {
-            showPanel(panelId);
+        if (visiblePanelIds.has(panelId)) {
+            hidePanel(panelId);
             return;
         }
 
-        hidePanel(panelId);
+        showPanel(panelId);
     };
 
     const detachPanel = (panelId: string) => {
@@ -389,6 +399,7 @@ export function useDockingLayout(initialState: EditorLayoutState) {
         dropPreview,
         edgePreview,
         visiblePanelIds,
+        layoutPanelIds,
         hiddenPanelIds,
         mainPanelCount,
         setDragInfo,

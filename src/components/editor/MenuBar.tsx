@@ -19,14 +19,22 @@ const VIEW_MENU_PANELS: PanelId[] = [
     PANEL_IDS.PLAYBACK,
 ];
 
+const DEBUG_MENU_PANELS: PanelId[] = [
+    PANEL_IDS.DEBUG_WML_JSON,
+    PANEL_IDS.DEBUG_AUDIO_OBJECT,
+    PANEL_IDS.DEBUG_WINDOW,
+];
+
 export function MenuBar({ docking, onOpenDialog }: MenuBarProps) {
     const [openMenu, setOpenMenu] = useState<string | null>(null);
+    const [openSubMenu, setOpenSubMenu] = useState<string | null>(null);
     const menuRef = useRef<HTMLElement>(null);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
                 setOpenMenu(null);
+                setOpenSubMenu(null);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
@@ -34,11 +42,14 @@ export function MenuBar({ docking, onOpenDialog }: MenuBarProps) {
     }, []);
 
     const toggleMenu = (menuName: string) => {
-        setOpenMenu(openMenu === menuName ? null : menuName);
+        const nextMenu = openMenu === menuName ? null : menuName;
+        setOpenMenu(nextMenu);
+        setOpenSubMenu(null);
     };
 
     const closeMenu = () => {
         setOpenMenu(null);
+        setOpenSubMenu(null);
     };
 
     const openDialog = (type: DialogType) => {
@@ -121,6 +132,44 @@ export function MenuBar({ docking, onOpenDialog }: MenuBarProps) {
                             </label>
                             );
                         })}
+                        <div className="menu-separator" role="separator" />
+                        <div className="submenu-wrapper">
+                            <button
+                                className="menu-item submenu-trigger"
+                                type="button"
+                                role="menuitem"
+                                aria-haspopup="menu"
+                                aria-expanded={openSubMenu === "debug"}
+                                onClick={() => setOpenSubMenu(openSubMenu === "debug" ? null : "debug")}
+                                onMouseEnter={() => setOpenSubMenu("debug")}
+                            >
+                                <span>디버그</span>
+                                <span className="submenu-arrow">›</span>
+                            </button>
+                            {openSubMenu === "debug" && (
+                                <div className="dropdown-menu submenu" role="menu">
+                                    {DEBUG_MENU_PANELS.map((panelId) => {
+                                        const isChecked = docking.visiblePanelIds.has(panelId);
+                                        const isDisabled = isChecked && !docking.canHidePanel(panelId);
+
+                                        return (
+                                            <label
+                                                key={panelId}
+                                                className={`dropdown-item checkbox-item${isDisabled ? " disabled" : ""}`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    disabled={isDisabled}
+                                                    onChange={() => docking.togglePanelVisibility(panelId)}
+                                                />
+                                                <span>{PANEL_TITLES[panelId]}</span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

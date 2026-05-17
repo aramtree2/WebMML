@@ -79,6 +79,25 @@
     min-height: 28px;
 }
 
+.submenu-wrapper {
+    position: relative;
+}
+
+.menu-bar .submenu-trigger {
+    justify-content: space-between;
+    width: 100%;
+}
+
+.submenu-arrow {
+    margin-left: 24px;
+}
+
+.dropdown-menu.submenu {
+    top: -6px;
+    left: calc(100% + 6px);
+    min-width: 156px;
+}
+
 .dropdown-item.checkbox-item {
     display: flex;
     align-items: center;

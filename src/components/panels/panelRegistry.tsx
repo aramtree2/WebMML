@@ -13,6 +13,7 @@ import { PlaybackPanel } from "./Playback";
 import { ScorePanel } from "./Score";
 import { VirtualPianoPanel } from "./VirtualPiano";
 import { PanelEmptyState } from "./Common";
+import { AudioObjectViewerPanel, DebugWindowPanel, WMLEditorPanel } from "./Debug";
 
 type PanelRenderer = () => React.ReactNode;
 
@@ -24,6 +25,9 @@ const panelRegistry: Record<PanelId, PanelRenderer> = {
     [PANEL_IDS.INSTRUMENT]: () => <InstrumentPanel />,
     [PANEL_IDS.MML_CODE]: () => <MmlCodePanel />,
     [PANEL_IDS.PLAYBACK]: () => <PlaybackPanel />,
+    [PANEL_IDS.DEBUG_WML_JSON]: () => <WMLEditorPanel />,
+    [PANEL_IDS.DEBUG_AUDIO_OBJECT]: () => <AudioObjectViewerPanel />,
+    [PANEL_IDS.DEBUG_WINDOW]: () => <DebugWindowPanel />,
 };
 
 export function renderPanel(id: string) {

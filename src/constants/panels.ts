@@ -6,6 +6,9 @@ export const PANEL_IDS = {
     INSTRUMENT: "instrument",
     MML_CODE: "mml-code",
     PLAYBACK: "playback",
+    DEBUG_WML_JSON: "debug-wml-json",
+    DEBUG_AUDIO_OBJECT: "debug-audio-object",
+    DEBUG_WINDOW: "debug-window",
 } as const;
 
 export type PanelId = (typeof PANEL_IDS)[keyof typeof PANEL_IDS];
@@ -18,6 +21,9 @@ export const PANEL_TITLES: Record<PanelId, string> = {
     [PANEL_IDS.INSTRUMENT]: "악기 구성",
     [PANEL_IDS.MML_CODE]: "MML 코드 표",
     [PANEL_IDS.PLAYBACK]: "재생 패널",
+    [PANEL_IDS.DEBUG_WML_JSON]: "WML JSON",
+    [PANEL_IDS.DEBUG_AUDIO_OBJECT]: "사운드 객체",
+    [PANEL_IDS.DEBUG_WINDOW]: "디버그 화면",
 };
 
 const LEGACY_PANEL_ID_MAP: Record<string, PanelId> = {
@@ -29,6 +35,12 @@ const LEGACY_PANEL_ID_MAP: Record<string, PanelId> = {
     "MML 코드 표": PANEL_IDS.MML_CODE,
     "mml 코드 표": PANEL_IDS.MML_CODE,
     "재생 패널": PANEL_IDS.PLAYBACK,
+    "WML JSON 메뉴": PANEL_IDS.DEBUG_WML_JSON,
+    "WML JSON": PANEL_IDS.DEBUG_WML_JSON,
+    "사운드 객체 메뉴": PANEL_IDS.DEBUG_AUDIO_OBJECT,
+    "사운드 객체": PANEL_IDS.DEBUG_AUDIO_OBJECT,
+    "디버그 화면 메뉴": PANEL_IDS.DEBUG_WINDOW,
+    "디버그 화면": PANEL_IDS.DEBUG_WINDOW,
 };
 
 export function isPanelId(id: string): id is PanelId {
