@@ -96,7 +96,7 @@ export function buildPlaybackTimeline(
 
 function clamp01(value: number): number {
     if (!Number.isFinite(value)) return 1;
-    return Math.max(0, Math.min(1, value));
+    return Math.max(0, Math.min(1, value / 15));
 }
 
 function getFollowingBarEndTick(tick: number, timeSignatures: WmlProject["timeSignatures"]) {

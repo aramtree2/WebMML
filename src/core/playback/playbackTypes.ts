@@ -59,8 +59,8 @@ export type PlaybackSnapshot = {
 export type PlaybackListener = (snapshot: PlaybackSnapshot) => void;
 
 export type InstrumentPlayer = {
-    playNote: (pitch: number, velocity?: number) => string;
-    stopNote: (voiceId: string) => void;
+    playNote: (pitch: number, velocity?: number, when?: number) => string;
+    stopNote: (voiceId: string, when?: number) => void;
     stopAll: () => void;
 };
 

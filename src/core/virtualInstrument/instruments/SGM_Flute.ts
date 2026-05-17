@@ -32,6 +32,6 @@ export const SGM_Flute: InstrumentDef = {
     },
     loop: {
         start: 0.55,
-        end: 0.2,
+        end: 0.7,
     }
 };

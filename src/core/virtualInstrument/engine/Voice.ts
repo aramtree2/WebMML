@@ -8,6 +8,8 @@ export class Voice {
     private onEnded: () => void;
     private disposed = false;
     private velocity: number;
+    private adsr: { attack: number; decay: number; sustain: number; release: number };
+    private startedAt: number | null = null;
 
     constructor(
         ctx: AudioContext,
@@ -21,6 +23,7 @@ export class Voice {
         this.ctx = ctx;
         this.id = crypto.randomUUID();
         this.velocity = Math.max(0, Math.min(1, velocity));
+        this.adsr = adsr;
         this.onEnded = onEnded ?? (() => {});
 
         this.source = ctx.createBufferSource();
@@ -43,22 +46,24 @@ export class Voice {
             this.onEnded();
         };
 
-        this.applyAttack(adsr);
     }
 
-    start() {
+    start(when = this.ctx.currentTime) {
         if (this.disposed) return;
-        this.source.start();
+        const startAt = Math.max(this.ctx.currentTime, when);
+        this.startedAt = startAt;
+        this.applyAttack(startAt);
+        this.source.start(startAt);
     }
 
-    stop(release: number) {
+    stop(release: number, when = this.ctx.currentTime) {
         if (this.isReleasing || this.disposed) return;
         this.isReleasing = true;
 
-        const now = this.ctx.currentTime;
+        const now = Math.max(this.ctx.currentTime, when);
         const param = this.gain.gain;
         const safeRelease = Math.max(release, 0.001);
-        const currentValue = param.value;
+        const currentValue = this.getScheduledGainAt(now);
 
         param.cancelScheduledValues(now);
         param.setValueAtTime(currentValue, now);
@@ -83,20 +88,41 @@ export class Voice {
         this.onEnded();
     }
 
-    private applyAttack(adsr: { attack: number; decay: number; sustain: number }) {
-        const now = this.ctx.currentTime;
-        const attack = Math.max(adsr.attack, 0.001);
-        const decay = Math.max(adsr.decay, 0.001);
-        const sustain = Math.max(0, Math.min(adsr.sustain, 1));
+    private applyAttack(startAt: number) {
+        const attack = Math.max(this.adsr.attack, 0.001);
+        const decay = Math.max(this.adsr.decay, 0.001);
+        const sustain = Math.max(0, Math.min(this.adsr.sustain, 1));
         const maxGain = this.velocity;
         const sustainGain = sustain * maxGain;
 
         const param = this.gain.gain;
 
-        param.cancelScheduledValues(now);
-        param.setValueAtTime(0, now);
-        param.linearRampToValueAtTime(maxGain, now + attack);
-        param.linearRampToValueAtTime(sustainGain, now + attack + decay);
+        param.cancelScheduledValues(this.ctx.currentTime);
+        param.setValueAtTime(0, startAt);
+        param.linearRampToValueAtTime(maxGain, startAt + attack);
+        param.linearRampToValueAtTime(sustainGain, startAt + attack + decay);
+    }
+
+    private getScheduledGainAt(time: number) {
+        if (this.startedAt == null) {
+            return 0;
+        }
+
+        const attack = Math.max(this.adsr.attack, 0.001);
+        const decay = Math.max(this.adsr.decay, 0.001);
+        const sustain = Math.max(0, Math.min(this.adsr.sustain, 1));
+        const maxGain = this.velocity;
+        const sustainGain = sustain * maxGain;
+        const elapsed = time - this.startedAt;
+
+        if (elapsed <= 0) return 0;
+        if (elapsed < attack) return maxGain * (elapsed / attack);
+        if (elapsed < attack + decay) {
+            const decayProgress = (elapsed - attack) / decay;
+            return maxGain + (sustainGain - maxGain) * decayProgress;
+        }
+
+        return sustainGain;
     }
 
     private dispose() {

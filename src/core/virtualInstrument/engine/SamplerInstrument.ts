@@ -23,7 +23,7 @@ export class SamplerInstrument {
         }
     }
 
-    playNote(note: number, velocity = 1): string {
+    playNote(note: number, velocity = 1, when = this.ctx.currentTime): string {
         this.enforceVoiceLimit();
 
         const sample = this.findClosestSample(note);
@@ -44,15 +44,15 @@ export class SamplerInstrument {
         );
 
         this.voices.set(voice.id, voice);
-        voice.start();
+        voice.start(when);
 
         return voice.id;
     }
 
-    stopNote(id: string) {
+    stopNote(id: string, when = this.ctx.currentTime) {
         const v = this.voices.get(id);
         if (!v) return;
-        v.stop(this.def.adsr.release);
+        v.stop(this.def.adsr.release, when);
     }
 
     stopAll() {

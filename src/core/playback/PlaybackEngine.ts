@@ -16,6 +16,8 @@ import type {
     PlaybackTimeline,
 } from "./playbackTypes";
 
+const NOTE_ON_LATE_TOLERANCE_SECONDS = 0.02;
+const PLAYBACK_START_PREROLL_SECONDS = 0.1;
 
 export type PlaybackEngineOptions = {
     lookAheadSeconds?: number;
@@ -41,15 +43,18 @@ export class PlaybackEngine {
     private readonly createPlayer: InstrumentPlayerFactory;
     private readonly unsubscribeWmlProject: () => void;
     private readonly unsubscribeArrangementControl: () => void;
+    private arrangementPlaybackKey = "";
 
     private schedulerTimerId: number | null = null;
     private uiTimerId: number | null = null;
     private pendingTimerIds = new Set<number>();
     private listeners = new Set<PlaybackListener>();
+    private playRequestId = 0;
 
     private players = new Map<string, InstrumentPlayer>();
     private loadingPlayers = new Map<string, Promise<InstrumentPlayer>>();
     private activeVoices = new Map<string, string>();
+    private stoppedVoiceKeys = new Set<string>();
     private mutedSections = new Set<string>();
     private sectionVolumes = new Map<string, number>();
 
@@ -59,10 +64,16 @@ export class PlaybackEngine {
         this.createPlayer = options.createPlayer ?? createInstrumentPlayer;
 
         this.rebuildTimelineFromWmlStore(false);
+        this.arrangementPlaybackKey = getArrangementPlaybackKey(getArrangementControlState());
         this.unsubscribeWmlProject = subscribeWmlProject(() => {
             this.rebuildTimelineFromWmlStore(true);
         });
-        this.unsubscribeArrangementControl = subscribeArrangementControlState(() => {
+        this.unsubscribeArrangementControl = subscribeArrangementControlState((nextControls) => {
+            const nextPlaybackKey = getArrangementPlaybackKey(nextControls);
+
+            if (nextPlaybackKey === this.arrangementPlaybackKey) return;
+
+            this.arrangementPlaybackKey = nextPlaybackKey;
             this.rebuildTimelineFromWmlStore(true);
         });
     }
@@ -103,6 +114,7 @@ export class PlaybackEngine {
     }
 
     async play(): Promise<void> {
+        const requestId = ++this.playRequestId;
         this.rebuildTimelineFromWmlStore(true);
 
         if (this.state === "playing") return;
@@ -116,15 +128,46 @@ export class PlaybackEngine {
         const ctx = this.getAudioContext();
         await ctx.resume();
 
+        if (requestId !== this.playRequestId) return;
+
         if (this.currentTime >= this.timeline.duration) {
             this.currentTime = 0;
             this.startOffset = 0;
         }
 
+        try {
+            await this.preloadPlayersFromTime(this.currentTime);
+        } catch (error) {
+            console.error("Failed to preload instruments for playback", error);
+            if (requestId === this.playRequestId) {
+                this.state = "stopped";
+                this.currentTime = 0;
+                this.startOffset = 0;
+                this.nextEventIndex = 0;
+                this.emit();
+            }
+            return;
+        }
+
+        if (requestId !== this.playRequestId) return;
+        if (this.timeline.duration <= 0 || this.timeline.events.length === 0) {
+            this.state = "stopped";
+            this.currentTime = 0;
+            this.startOffset = 0;
+            this.nextEventIndex = 0;
+            this.emit();
+            return;
+        }
+
+        this.clearStoppedVoiceKeys();
         this.state = "playing";
-        this.startedAtAudioTime = ctx.currentTime;
         this.startOffset = this.currentTime;
-        this.nextEventIndex = findEventIndex(this.timeline.events, this.currentTime);
+        this.startedAtAudioTime = ctx.currentTime +
+            (this.startOffset <= 0 ? PLAYBACK_START_PREROLL_SECONDS : 0);
+        this.nextEventIndex = findEventIndex(
+            this.timeline.events,
+            this.startOffset <= 0 ? -PLAYBACK_START_PREROLL_SECONDS : this.currentTime,
+        );
 
         this.startScheduler();
         this.startUiTimer();
@@ -142,6 +185,7 @@ export class PlaybackEngine {
     }
 
     stop(): void {
+        this.playRequestId++;
         this.state = "stopped";
         this.currentTime = 0;
         this.startOffset = 0;
@@ -290,10 +334,14 @@ export class PlaybackEngine {
             this.timeline.events[this.nextEventIndex].time <= scheduleUntil
         ) {
             const event = this.timeline.events[this.nextEventIndex];
+            const lateness = musicTime - event.time;
 
-            if (event.time >= musicTime - 0.001) {
-                const delayMs = Math.max(0, ((event.time - musicTime) / this.playbackRate) * 1000);
-                this.scheduleEvent(event, delayMs);
+            if (
+                event.type !== "noteOn" ||
+                lateness <= NOTE_ON_LATE_TOLERANCE_SECONDS
+            ) {
+                const delaySeconds = Math.max(0, (event.time - musicTime) / this.playbackRate);
+                this.scheduleEvent(event, now + delaySeconds);
             }
 
             this.nextEventIndex++;
@@ -304,45 +352,71 @@ export class PlaybackEngine {
         }
     }
 
-    private scheduleEvent(event: PlaybackEvent, delayMs: number): void {
-        const timerId = window.setTimeout(() => {
-            this.pendingTimerIds.delete(timerId);
-            void this.handleEvent(event);
-        }, delayMs);
-
-        this.pendingTimerIds.add(timerId);
+    private scheduleEvent(event: PlaybackEvent, audioTime: number): void {
+        void this.handleEvent(event, audioTime);
     }
 
-    private async handleEvent(event: PlaybackEvent): Promise<void> {
+    private async handleEvent(event: PlaybackEvent, audioTime: number): Promise<void> {
         if (this.state !== "playing") return;
-        if (this.mutedSections.has(event.sectionId)) return;
+        const scheduledAudioTime = Math.max(this.getAudioContext().currentTime, audioTime);
 
         if (event.type === "sustain") {
+            if (this.mutedSections.has(event.sectionId)) return;
             return;
         }
 
         const key = getVoiceKey(event.sectionId, event.noteId);
 
         if (event.type === "noteOn") {
+            if (this.mutedSections.has(event.sectionId)) return;
+            if (this.stoppedVoiceKeys.delete(key)) return;
+
             const instrumentId = event.wmlInstrument;
             const player = await this.getPlayer(instrumentId);
+            if (this.state !== "playing" || this.stoppedVoiceKeys.delete(key)) return;
+
+            this.stopActiveVoice(key, scheduledAudioTime);
+
             const sectionVolume = this.sectionVolumes.get(event.sectionId) ?? 1;
             const velocity = clamp(event.velocity * this.masterVolume * sectionVolume, 0, 1);
-            const voiceId = player.playNote(event.pitch, velocity);
+            const voiceId = player.playNote(event.pitch, velocity, scheduledAudioTime);
             this.activeVoices.set(key, `${instrumentId}:${voiceId}`);
             return;
         }
 
+        if (!this.stopActiveVoice(key, scheduledAudioTime)) {
+            this.stoppedVoiceKeys.add(key);
+        }
+    }
+
+    private stopActiveVoice(key: string, audioTime = this.getAudioContext().currentTime): boolean {
         const packedVoice = this.activeVoices.get(key);
-        if (!packedVoice) return;
+        if (!packedVoice) {
+            return false;
+        }
 
         const separatorIndex = packedVoice.indexOf(":");
         const instrumentId = packedVoice.slice(0, separatorIndex);
         const voiceId = packedVoice.slice(separatorIndex + 1);
         const player = this.players.get(instrumentId);
 
-        player?.stopNote(voiceId);
+        player?.stopNote(voiceId, audioTime);
         this.activeVoices.delete(key);
+        this.stoppedVoiceKeys.delete(key);
+        return true;
+    }
+
+    private async preloadPlayersFromTime(time: number): Promise<void> {
+        const instrumentIds = new Set<string>();
+
+        for (const event of this.timeline.events) {
+            if (event.time < time) continue;
+            if (event.type === "noteOn") {
+                instrumentIds.add(event.wmlInstrument);
+            }
+        }
+
+        await Promise.all([...instrumentIds].map((instrumentId) => this.getPlayer(instrumentId)));
     }
 
     private async getPlayer(instrumentId: string): Promise<InstrumentPlayer> {
@@ -373,6 +447,11 @@ export class PlaybackEngine {
         }
 
         this.activeVoices.clear();
+        this.clearStoppedVoiceKeys();
+    }
+
+    private clearStoppedVoiceKeys(): void {
+        this.stoppedVoiceKeys.clear();
     }
 
     private clearPendingTimers(): void {
@@ -443,6 +522,15 @@ function findEventIndex(events: PlaybackEvent[], time: number): number {
 
 function getVoiceKey(sectionId: string, noteId: string): string {
     return `${sectionId}:${noteId}`;
+}
+
+function getArrangementPlaybackKey(controls: ReturnType<typeof getArrangementControlState>): string {
+    const mutedChordIds = Object.entries(controls.chords)
+        .filter(([, control]) => control.mute)
+        .map(([chordId]) => chordId)
+        .sort();
+
+    return mutedChordIds.join("|");
 }
 
 function clamp(value: number, min: number, max: number): number {

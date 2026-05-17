@@ -7,7 +7,7 @@ export const SGM_Violin: InstrumentDef = {
     name: "SGM_Violin",
     type: "sampler",
     samples: [
-        { note: 57, url: `${base}samples/SGM_Violin/A3.wav` },
+        // { note: 57, url: `${base}samples/SGM_Violin/A3.wav` },
         { note: 69, url: `${base}samples/SGM_Violin/A4.wav` },
         { note: 81, url: `${base}samples/SGM_Violin/A5.wav` },
         // { note: 96, url: `${base}samples/SGM_Violin/C7.wav` },
