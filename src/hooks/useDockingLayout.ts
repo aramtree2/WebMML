@@ -23,14 +23,60 @@ import {
     wrapLayoutByEdge,
 } from "../utils/layoutTree";
 
+function collectPanelIds(node: LayoutNode): string[] {
+    if (node.type === "tabs") return node.ids;
+
+    return node.children.flatMap((child) => collectPanelIds(child));
+}
+
 export function useDockingLayout(initialState: EditorLayoutState) {
     const [mainLayout, setMainLayout] = useState<LayoutNode>(initialState.mainLayout);
     const [floating, setFloating] = useState<FloatingWindow[]>(initialState.floating);
+    const [hiddenPanelIds, setHiddenPanelIds] = useState<Set<string>>(() => new Set());
     const [dragInfo, setDragInfo] = useState<DragInfo>(null);
     const [dropPreview, setDropPreview] = useState<DropPreview>(null);
     const [edgePreview, setEdgePreview] = useState<EdgePreview>(null);
 
     const mainPanelCount = countPanels(mainLayout);
+    const visiblePanelIds = new Set([
+        ...collectPanelIds(mainLayout),
+        ...floating.flatMap((win) => collectPanelIds(win.layout)),
+    ].filter((panelId) => !hiddenPanelIds.has(panelId)));
+    const visiblePanelCount = visiblePanelIds.size;
+
+    const canHidePanel = (panelId: string) => {
+        if (!visiblePanelIds.has(panelId)) return false;
+        if (visiblePanelCount <= 1) return false;
+
+        return true;
+    };
+
+    const hidePanel = (panelId: string) => {
+        if (!canHidePanel(panelId)) return;
+
+        setHiddenPanelIds((prev) => {
+            const next = new Set(prev);
+            next.add(panelId);
+            return next;
+        });
+    };
+
+    const showPanel = (panelId: string) => {
+        setHiddenPanelIds((prev) => {
+            const next = new Set(prev);
+            next.delete(panelId);
+            return next;
+        });
+    };
+
+    const togglePanelVisibility = (panelId: string) => {
+        if (hiddenPanelIds.has(panelId)) {
+            showPanel(panelId);
+            return;
+        }
+
+        hidePanel(panelId);
+    };
 
     const detachPanel = (panelId: string) => {
         if (countPanels(mainLayout) <= 1) return;
@@ -342,9 +388,15 @@ export function useDockingLayout(initialState: EditorLayoutState) {
         dragInfo,
         dropPreview,
         edgePreview,
+        visiblePanelIds,
+        hiddenPanelIds,
         mainPanelCount,
         setDragInfo,
         setEdgePreview,
+        canHidePanel,
+        hidePanel,
+        showPanel,
+        togglePanelVisibility,
         detachPanel,
         restorePanel,
         handleSelectTab,

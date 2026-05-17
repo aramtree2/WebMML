@@ -9,6 +9,7 @@ type PanelFrameProps = {
     windowId: string | "main";
     dragInfo: DragInfo;
     dropPreview: DropPreview;
+    hiddenPanelIds: Set<string>;
     mainPanelCount: number;
     isFloating: boolean;
     onDetach: (id: string) => void;
@@ -26,6 +27,7 @@ export function PanelFrame({
     windowId,
     dragInfo,
     dropPreview,
+    hiddenPanelIds,
     mainPanelCount,
     isFloating,
     onDetach,
@@ -36,7 +38,9 @@ export function PanelFrame({
     onDragStart,
     onDragEnd,
 }: PanelFrameProps) {
-    const currentActiveId = activeId || ids[0];
+    const visibleIds = ids.filter((id) => !hiddenPanelIds.has(id));
+    const currentActiveId = visibleIds.includes(activeId) ? activeId : visibleIds[0] ?? ids[0];
+    const isFrameHidden = visibleIds.length === 0;
     const canDrag = isFloating || windowId !== "main" || mainPanelCount > 1;
     const canDetach = !isFloating && mainPanelCount > 1;
     const canRestore = isFloating && windowId !== "main";
@@ -53,9 +57,9 @@ export function PanelFrame({
     };
 
     return (
-        <div className="panel-frame">
+        <div className={`panel-frame${isFrameHidden ? " hidden" : ""}`}>
             <div className="tab-bar">
-                {ids.map((id) => (
+                {visibleIds.map((id) => (
                     <div
                         key={id}
                         className={`tab ${id === currentActiveId ? "active" : ""}`}
@@ -90,7 +94,14 @@ export function PanelFrame({
                     <div className={`drop-preview ${dropPreview.direction}`} />
                 )}
 
-                {renderPanel(currentActiveId)}
+                {ids.map((id) => (
+                    <div
+                        key={id}
+                        className={`panel-content-pane${id === currentActiveId && !hiddenPanelIds.has(id) ? " active" : ""}`}
+                    >
+                        {renderPanel(id)}
+                    </div>
+                ))}
             </div>
         </div>
     );

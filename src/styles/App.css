@@ -71,6 +71,12 @@ body,
   overflow: hidden;
 }
 
+.split-child.hidden,
+.splitter.hidden,
+.panel-frame.hidden {
+  display: none;
+}
+
 .splitter {
   flex-shrink: 0;
   background: #cfcfcf;
@@ -132,6 +138,16 @@ body,
   flex: 1;
   min-height: 0;
   background: #ffffff;
+}
+
+.panel-content-pane {
+  display: none;
+  width: 100%;
+  height: 100%;
+}
+
+.panel-content-pane.active {
+  display: block;
 }
 
 .panel-toolbar {
@@ -251,6 +267,10 @@ body,
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
   display: flex;
   flex-direction: column;
+}
+
+.floating-window.hidden {
+  display: none;
 }
 
 .floating-window.maximized {

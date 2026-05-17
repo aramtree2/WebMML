@@ -1,64 +1,121 @@
-/* 상단 메뉴바 기본 정렬 */
 .menu-bar {
     display: flex;
-    gap: 5px;
+    align-items: center;
+    gap: 2px;
     position: relative;
-    z-index: 9999; /* 화면 최상단에 뜨도록 보장 */
+    z-index: 9999;
+    height: 34px;
+    padding: 0 8px;
+    background: #f6f7f9;
+    border-bottom: 1px solid #d2d6de;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+    box-sizing: border-box;
 }
 
-/* 메뉴 뼈대 (드롭다운의 기준점) */
 .menu-wrapper {
     position: relative;
-}
-
-/* 드롭다운 창 본체 */
-.dropdown-menu {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    background-color: #f9f9f9; /* 윈도우 기본 메뉴 색상 느낌 */
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
-    display: flex;
-    flex-direction: column;
-    min-width: 160px;
-    padding: 5px 0;
-}
-
-/* 일반 버튼 아이템 */
-.dropdown-menu button {
-    background: none;
-    border: none;
-    text-align: left;
-    padding: 8px 15px;
-    cursor: pointer;
-    font-size: 13px;
-    color: #333;
-
+    height: 26px;
     display: flex;
     align-items: center;
 }
 
-/* 보기 메뉴의 체크박스 아이템 */
+.menu-bar .menu-trigger {
+    height: 26px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: #23262d;
+    border: 1px solid transparent;
+    border-radius: 0;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+.menu-bar .menu-trigger:hover,
+.menu-bar .menu-trigger[aria-expanded="true"] {
+    background: #ffffff;
+    border-color: #c9ced8;
+    box-shadow: none;
+}
+
+.menu-bar .menu-trigger:focus-visible,
+.menu-bar .menu-item:focus-visible,
+.menu-bar .checkbox-item:focus-within {
+    outline: 2px solid #6f9cff;
+    outline-offset: 1px;
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 168px;
+    padding: 6px;
+    background: #ffffff;
+    border: 1px solid #cfd5df;
+    border-radius: 0;
+    box-shadow: 0 10px 24px rgba(21, 27, 38, 0.16), 0 2px 6px rgba(21, 27, 38, 0.08);
+    box-sizing: border-box;
+}
+
+.menu-bar .menu-item {
+    background: none;
+    border: none;
+    border-radius: 0;
+    text-align: left;
+    padding: 7px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #20242b;
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+}
+
 .dropdown-item.checkbox-item {
     display: flex;
     align-items: center;
-    gap: 8px; /* 체크박스와 글씨 간격 */
-    padding: 8px 15px;
+    gap: 8px;
+    min-height: 28px;
+    padding: 6px 10px;
+    border-radius: 0;
     cursor: pointer;
     font-size: 13px;
-    color: #333;
-    user-select: none; /* 클릭 시 텍스트 파랗게 드래그되는 현상 방지 */
+    color: #20242b;
+    user-select: none;
 }
 
-/* 마우스 올렸을 때 하이라이트 효과 */
-.dropdown-menu button:hover,
-.dropdown-item.checkbox-item:hover {
-    background-color: #e0eaff;
+.menu-bar .menu-item:hover,
+.menu-bar .dropdown-item.checkbox-item:hover {
+    background: #eef3ff;
+    color: #174ea6;
+}
+
+.menu-bar .dropdown-item.checkbox-item.disabled {
+    color: #8a9099;
+    cursor: default;
+}
+
+.menu-bar .dropdown-item.checkbox-item.disabled:hover {
+    background: transparent;
+    color: #8a9099;
+}
+
+.menu-separator {
+    height: 1px;
+    margin: 5px 4px;
+    background: #e4e8ef;
 }
 
 .checkbox-item input[type="checkbox"] {
     cursor: pointer;
     margin: 0;
+    accent-color: #3b72d9;
 }

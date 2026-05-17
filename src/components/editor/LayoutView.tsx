@@ -2,12 +2,25 @@ import React from "react";
 import type { DragInfo, DropPreview, LayoutNode } from "../../types/layout";
 import { PanelFrame } from "./PanelFrame";
 
+function nodeHasVisiblePanel(node: LayoutNode, hiddenPanelIds: Set<string>): boolean {
+    if (node.type === "tabs") return node.ids.some((id) => !hiddenPanelIds.has(id));
+
+    return node.children.some((child) => nodeHasVisiblePanel(child, hiddenPanelIds));
+}
+
+function getLayoutNodeKey(node: LayoutNode): string {
+    if (node.type === "tabs") return `tabs:${node.ids.join("|")}`;
+
+    return `split:${node.direction}:${node.children.map(getLayoutNodeKey).join("/")}`;
+}
+
 type LayoutViewProps = {
     node: LayoutNode;
     windowId: string | "main";
     path: number[];
     dragInfo: DragInfo;
     dropPreview: DropPreview;
+    hiddenPanelIds: Set<string>;
     mainPanelCount: number;
     onDetach: (id: string) => void;
     onRestore: (id: string, windowId: string) => void;
@@ -32,6 +45,7 @@ export function LayoutView({
     path,
     dragInfo,
     dropPreview,
+    hiddenPanelIds,
     mainPanelCount,
     onDetach,
     onRestore,
@@ -45,6 +59,11 @@ export function LayoutView({
 }: LayoutViewProps) {
     if (node.type === "split") {
         const sizes = node.sizes ?? Array(node.children.length).fill(100 / node.children.length);
+        const childVisibility = node.children.map((child) => nodeHasVisiblePanel(child, hiddenPanelIds));
+        const visibleSizeTotal = sizes.reduce(
+            (sum, size, index) => sum + (childVisibility[index] ? size : 0),
+            0
+        );
 
         const startResize = (e: React.MouseEvent, splitterIndex: number) => {
             e.preventDefault();
@@ -78,12 +97,22 @@ export function LayoutView({
 
         return (
             <div className={`split ${node.direction}`}>
-                {node.children.map((child, index) => (
-                    <React.Fragment key={index}>
+                {node.children.map((child, index) => {
+                    const isHidden = !childVisibility[index];
+                    const beforeHidden = index > 0 && !childVisibility[index - 1];
+                    const afterHidden = index < childVisibility.length - 1 && !childVisibility[index + 1];
+                    const splitterHidden = isHidden || beforeHidden || afterHidden;
+                    const visibleFlexBasis =
+                        childVisibility[index] && visibleSizeTotal > 0
+                            ? (sizes[index] / visibleSizeTotal) * 100
+                            : sizes[index];
+
+                    return (
+                    <React.Fragment key={getLayoutNodeKey(child)}>
                         <div
-                            className="split-child"
+                            className={`split-child${isHidden ? " hidden" : ""}`}
                             style={{
-                                flexBasis: `${sizes[index]}%`,
+                                flexBasis: `${visibleFlexBasis}%`,
                                 flexGrow: 0,
                                 flexShrink: 0,
                             }}
@@ -94,6 +123,7 @@ export function LayoutView({
                                 path={[...path, index]}
                                 dragInfo={dragInfo}
                                 dropPreview={dropPreview}
+                                hiddenPanelIds={hiddenPanelIds}
                                 mainPanelCount={mainPanelCount}
                                 onDetach={onDetach}
                                 onRestore={onRestore}
@@ -111,12 +141,13 @@ export function LayoutView({
                             <div
                                 className={`splitter ${
                                     node.direction === "row" ? "splitter-vertical" : "splitter-horizontal"
-                                }`}
+                                }${splitterHidden ? " hidden" : ""}`}
                                 onMouseDown={(e) => startResize(e, index)}
                             />
                         )}
                     </React.Fragment>
-                ))}
+                    );
+                })}
             </div>
         );
     }
@@ -128,6 +159,7 @@ export function LayoutView({
             windowId={windowId}
             dragInfo={dragInfo}
             dropPreview={dropPreview}
+            hiddenPanelIds={hiddenPanelIds}
             mainPanelCount={mainPanelCount}
             isFloating={isFloating}
             onDetach={onDetach}

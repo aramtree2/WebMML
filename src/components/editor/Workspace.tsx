@@ -26,6 +26,7 @@ export function Workspace({ docking }: WorkspaceProps) {
                     path={[]}
                     dragInfo={docking.dragInfo}
                     dropPreview={docking.dropPreview}
+                    hiddenPanelIds={docking.hiddenPanelIds}
                     mainPanelCount={docking.mainPanelCount}
                     onDetach={docking.detachPanel}
                     onRestore={docking.restorePanel}
@@ -48,6 +49,7 @@ export function Workspace({ docking }: WorkspaceProps) {
                     setFloating={docking.setFloating}
                     dragInfo={docking.dragInfo}
                     dropPreview={docking.dropPreview}
+                    hiddenPanelIds={docking.hiddenPanelIds}
                     mainPanelCount={docking.mainPanelCount}
                     onEdgePreview={docking.setEdgePreview}
                     onDockFloatingWindow={docking.dockFloatingWindow}

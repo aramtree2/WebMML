@@ -24,12 +24,20 @@ function getActivePanelId(node: LayoutNode): string | null {
     return null;
 }
 
+function hasVisiblePanel(node: LayoutNode, hiddenPanelIds: Set<string>): boolean {
+    if (node.type === "tabs") {
+        return node.ids.some((id) => !hiddenPanelIds.has(id));
+    }
+
+    return node.children.some((child) => hasVisiblePanel(child, hiddenPanelIds));
+}
 
 type FloatingWindowViewProps = {
     win: FloatingWindow;
     setFloating: React.Dispatch<React.SetStateAction<FloatingWindow[]>>;
     dragInfo: DragInfo;
     dropPreview: DropPreview;
+    hiddenPanelIds: Set<string>;
     mainPanelCount: number;
     onEdgePreview: (preview: EdgePreview) => void;
     onDockFloatingWindow: (
@@ -58,6 +66,7 @@ export function FloatingWindowView({
     setFloating,
     dragInfo,
     dropPreview,
+    hiddenPanelIds,
     mainPanelCount,
     onEdgePreview,
     onDockFloatingWindow,
@@ -70,6 +79,8 @@ export function FloatingWindowView({
     onDragEnd,
     onResizeSplit,
 }: FloatingWindowViewProps) {
+    const isHidden = !hasVisiblePanel(win.layout, hiddenPanelIds);
+
     const moveWindow = (e: React.MouseEvent) => {
         if (win.maximized) return;
 
@@ -146,7 +157,7 @@ export function FloatingWindowView({
 
     return (
         <div
-            className={`floating-window ${win.maximized ? "maximized" : ""}`}
+            className={`floating-window ${win.maximized ? "maximized" : ""}${isHidden ? " hidden" : ""}`}
             data-dock-id={win.id}
             style={
                 win.maximized
@@ -181,6 +192,7 @@ export function FloatingWindowView({
                     path={[]}
                     dragInfo={dragInfo}
                     dropPreview={dropPreview}
+                    hiddenPanelIds={hiddenPanelIds}
                     mainPanelCount={mainPanelCount}
                     onDetach={onDetach}
                     onRestore={onRestore}

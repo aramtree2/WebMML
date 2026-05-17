@@ -13,7 +13,7 @@ export function EditorShell({ docking }: EditorShellProps) {
 
     return (
         <>
-            <MenuBar onOpenDialog={openDialog} />
+            <MenuBar docking={docking} onOpenDialog={openDialog} />
             <Workspace docking={docking} />
             <DialogHost dialog={dialog} onClose={closeDialog} />
         </>
