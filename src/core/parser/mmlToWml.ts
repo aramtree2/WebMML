@@ -546,7 +546,7 @@ function convertMS2ContentToWML(
         timeSignatures: [
             {
                 id: createId("timesig"),
-                tick: 0,
+                bar: 0,
                 numerator,
                 denominator,
             },
@@ -620,7 +620,7 @@ export function mmlToWml(
         timeSignatures: [
             {
                 id: createId("timesig"),
-                tick: 0,
+                bar: 0,
                 numerator,
                 denominator,
             },

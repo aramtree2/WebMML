@@ -40,19 +40,103 @@
 
 .piano-roll-beat-label {
     position: absolute;
-    top: 0;
-    height: 100%;
     padding-left: 4px;
     box-sizing: border-box;
     border-left: 1px solid #d4d4d4;
-    line-height: 28px;
+    border-top: 1px solid #d7d7d7;
+    line-height: 17px;
     color: #777;
     user-select: none;
+    cursor: pointer;
 }
 
 .piano-roll-beat-label.measure-label {
+    border-left-color: #aaaaaa;
     color: #333;
     font-weight: 600;
+}
+
+.piano-roll-measure-label {
+    position: absolute;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-left: 1px solid #aaaaaa;
+    line-height: 17px;
+    color: #333;
+    font-weight: 600;
+    user-select: none;
+}
+
+.piano-roll-measure-label:hover {
+    background: #e2e2e2;
+}
+
+.piano-roll-time-signature-label {
+    min-width: 0;
+    color: #555555;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: nowrap;
+}
+
+.piano-roll-measure-number-label {
+    margin-left: auto;
+    color: #333333;
+    font-weight: 400;
+    white-space: nowrap;
+}
+
+.piano-roll-tempo-label {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    box-sizing: border-box;
+    color: #2f7fb2;
+    font-weight: 600;
+    line-height: 17px;
+    pointer-events: auto;
+    user-select: none;
+    cursor: pointer;
+    z-index: 4;
+}
+
+.piano-roll-tempo-marker {
+    width: 7px;
+    height: 15px;
+    box-sizing: border-box;
+    border: 1px solid #155f86;
+    background: #2f9ac6;
+}
+
+.piano-roll-tempo-preview-marker {
+    position: absolute;
+    width: 7px;
+    box-sizing: border-box;
+    border: 1px dashed #1f7ca9;
+    background: rgba(69, 179, 221, 0.28);
+    pointer-events: none;
+    z-index: 3;
+}
+
+.piano-roll-tempo-label:hover .piano-roll-tempo-marker {
+    border-color: #1f7ca9;
+    background: #45b3dd;
+}
+
+.piano-roll-tempo-label:hover .piano-roll-tempo-value {
+    color: #3997cc;
+}
+
+.piano-roll-tempo-value {
+    text-shadow: 0 1px 0 #ffffff;
+    white-space: nowrap;
 }
 
 .piano-roll-body {
@@ -68,6 +152,7 @@
 .piano-roll-keyboard {
     position: relative;
     flex: 0 0 auto;
+    box-sizing: border-box;
     overflow: hidden;
     border-right: 1px solid #bdbdbd;
     background: #f8f8f8;
@@ -93,22 +178,11 @@
 .piano-roll-white-key-label {
     position: absolute;
     right: 6px;
+    transform: translateY(-50%);
     line-height: 1;
     color: #555;
     pointer-events: none;
-}
-
-.piano-roll-white-key-label.top {
-    top: 3px;
-}
-
-.piano-roll-white-key-label.center {
-    top: 50%;
-    transform: translateY(-50%);
-}
-
-.piano-roll-white-key-label.bottom {
-    bottom: 3px;
+    z-index: 3;
 }
 
 .piano-roll-black-key {
@@ -170,9 +244,23 @@
 .piano-roll-note {
     position: absolute;
     box-sizing: border-box;
-    border: 1px solid #3f7fc4;
+    border: 1px solid #6b7f95;
     border-radius: 3px;
-    background: #6fa8dc;
+    background: #8fa3b8;
+}
+
+.piano-roll-note.section-selected {
+    border-color: #1d4ed8;
+    background: #2563eb;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.32);
+    z-index: 2;
+}
+
+.piano-roll-note.chord-selected {
+    border-color: #b45309;
+    background: #f59e0b;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.36);
+    z-index: 3;
 }
 
 .piano-roll-time-header {
@@ -180,20 +268,34 @@
 }
 
 .piano-roll-playhead,
-.piano-roll-playhead-header {
+.piano-roll-playhead-header,
+.piano-roll-last-note-end,
+.piano-roll-last-note-end-header {
     position: absolute;
     width: 2px;
-    background: #ff1f1f;
     pointer-events: none;
+}
+
+.piano-roll-playhead,
+.piano-roll-playhead-header {
+    background: #ff1f1f;
     z-index: 10;
 }
 
-.piano-roll-playhead {
+.piano-roll-last-note-end,
+.piano-roll-last-note-end-header {
+    background: rgba(75, 178, 235, 0.45);
+    z-index: 5;
+}
+
+.piano-roll-playhead,
+.piano-roll-last-note-end {
     top: 0;
     bottom: 0;
 }
 
-.piano-roll-playhead-header {
+.piano-roll-playhead-header,
+.piano-roll-last-note-end-header {
     top: 0;
     bottom: 0;
 }

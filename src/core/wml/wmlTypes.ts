@@ -25,7 +25,7 @@ export type TempoEvent = {
 
 export type TimeSignatureEvent = {
     id: string;
-    tick: number;
+    bar: number;
     numerator: number;
     denominator: number;
 };

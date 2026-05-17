@@ -438,7 +438,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                 wml.timeSignatures = [
                     {
                         id: crypto.randomUUID(),
-                        tick: 0,
+                        bar: 0,
                         numerator,
                         denominator,
                     },

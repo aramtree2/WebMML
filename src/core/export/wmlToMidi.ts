@@ -3,6 +3,7 @@ import type { WmlProject, NoteEvent } from "../wml/wmlTypes";
 
 import { DEFAULT_INSTRUMENT_ID } from "../virtualInstrument/instrumentRegistry";
 import { INSTRUMENT_ID_TO_MIDI_PROGRAM } from "../parser/instrumentMappings";
+import { barToTick } from "../wml/wmlUtils";
 
 type WmlToMidiOptions = {
     selectedInstruments?: Record<number, string | number>;
@@ -37,7 +38,7 @@ export function wmlToMidi(
 
     for (const ts of wml.timeSignatures) {
         midi.header.timeSignatures.push({
-            ticks: ts.tick,
+            ticks: barToTick(ts.bar, wml.timeSignatures),
             timeSignature: [ts.numerator, ts.denominator],
         });
     }

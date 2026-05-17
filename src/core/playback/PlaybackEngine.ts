@@ -1,7 +1,10 @@
-import { createInstrumentPlayer, DEFAULT_INSTRUMENT_ID } from "../virtualInstrument";
+import { createInstrumentPlayer} from "../virtualInstrument";
+import {
+    getArrangementControlState,
+    subscribeArrangementControlState,
+} from "../editor/arrangementControlStore";
 import { getWmlProject, subscribeWmlProject } from "../wml/wmlStore";
 import { buildPlaybackTimeline } from "./buildPlaybackTimeline";
-import { getAllInstrumentDefs } from "../virtualInstrument/instrumentRegistry";
 import type {
     InstrumentIdResolver,
     InstrumentPlayer,
@@ -27,7 +30,7 @@ export class PlaybackEngine {
     private state: PlaybackState = "stopped";
 
     private playbackRate = 1;
-    private masterVolume = 1;
+    private masterVolume = 0.5;
     private currentTime = 0;
     private startedAtAudioTime = 0;
     private startOffset = 0;
@@ -35,9 +38,9 @@ export class PlaybackEngine {
 
     private readonly lookAheadSeconds: number;
     private readonly schedulerIntervalMs: number;
-    private readonly instrumentIdResolver: InstrumentIdResolver;
     private readonly createPlayer: InstrumentPlayerFactory;
     private readonly unsubscribeWmlProject: () => void;
+    private readonly unsubscribeArrangementControl: () => void;
 
     private schedulerTimerId: number | null = null;
     private uiTimerId: number | null = null;
@@ -53,18 +56,23 @@ export class PlaybackEngine {
     constructor(options: PlaybackEngineOptions = {}) {
         this.lookAheadSeconds = options.lookAheadSeconds ?? 0.12;
         this.schedulerIntervalMs = options.schedulerIntervalMs ?? 25;
-        this.instrumentIdResolver = options.instrumentIdResolver ?? defaultInstrumentIdResolver;
         this.createPlayer = options.createPlayer ?? createInstrumentPlayer;
 
         this.rebuildTimelineFromWmlStore(false);
         this.unsubscribeWmlProject = subscribeWmlProject(() => {
             this.rebuildTimelineFromWmlStore(true);
         });
+        this.unsubscribeArrangementControl = subscribeArrangementControlState(() => {
+            this.rebuildTimelineFromWmlStore(true);
+        });
     }
 
     rebuildTimelineFromWmlStore(keepPlaybackState = true): void {
         const project = getWmlProject();
-        this.setTimeline(buildPlaybackTimeline(project), keepPlaybackState);
+        this.setTimeline(
+            buildPlaybackTimeline(project, getArrangementControlState()),
+            keepPlaybackState,
+        );
     }
 
     setTimeline(timeline: PlaybackTimeline, keepPlaybackState = true): void {
@@ -224,6 +232,7 @@ export class PlaybackEngine {
     dispose(): void {
         this.stop();
         this.unsubscribeWmlProject();
+        this.unsubscribeArrangementControl();
         this.listeners.clear();
     }
 
@@ -315,7 +324,7 @@ export class PlaybackEngine {
         const key = getVoiceKey(event.sectionId, event.noteId);
 
         if (event.type === "noteOn") {
-            const instrumentId = this.instrumentIdResolver(event.wmlInstrument);
+            const instrumentId = event.wmlInstrument;
             const player = await this.getPlayer(instrumentId);
             const sectionVolume = this.sectionVolumes.get(event.sectionId) ?? 1;
             const velocity = clamp(event.velocity * this.masterVolume * sectionVolume, 0, 1);
@@ -408,12 +417,13 @@ export class PlaybackEngine {
 
 export const playbackEngine = new PlaybackEngine();
 
-function defaultInstrumentIdResolver(wmlInstrument: string): string {
-    const index = Number(wmlInstrument) - 1;
-    const instruments = getAllInstrumentDefs();
+// function defaultInstrumentIdResolver(wmlInstrument: string): string {
+//     const index = Number(wmlInstrument) - 1;
+//     const instruments = getAllInstrumentDefs();
 
-    return instruments[index]?.id ?? DEFAULT_INSTRUMENT_ID;
-}
+//     return instruments[index]?.id ?? DEFAULT_INSTRUMENT_ID;
+// }
+
 function findEventIndex(events: PlaybackEvent[], time: number): number {
     let low = 0;
     let high = events.length;

@@ -1,3 +1,5 @@
+import type { ArrangementControlState } from "../editor/arrangementControlStore";
+import { barToTick } from "../wml/wmlUtils";
 import type { WmlProject } from "../wml/wmlTypes";
 import type { PlaybackEvent, PlaybackTimeline } from "./playbackTypes";
 import { tickToSeconds } from "./tempoUtils";
@@ -8,23 +10,33 @@ const EVENT_ORDER: Record<PlaybackEvent["type"], number> = {
     noteOn: 2,
 };
 
-export function buildPlaybackTimeline(project: WmlProject): PlaybackTimeline {
+export function buildPlaybackTimeline(
+    project: WmlProject,
+    controls?: ArrangementControlState,
+): PlaybackTimeline {
     const events: PlaybackEvent[] = [];
     let durationTick = 0;
+    let lastNoteEndTick = 0;
 
     for (const section of project.sections) {
         for (const chord of section.chords) {
+            const chordMuted = controls?.chords[chord.id]?.mute === true;
+
             for (const note of chord.notes) {
                 const startTick = Math.max(0, note.tick);
                 const duration = Math.max(0, note.duration);
                 const endTick = startTick + duration;
 
                 durationTick = Math.max(durationTick, endTick);
+                lastNoteEndTick = Math.max(lastNoteEndTick, endTick);
+
+                if (chordMuted) continue;
 
                 events.push({
                     id: `${note.id}-on`,
                     type: "noteOn",
                     sectionId: section.id,
+                    chordId: chord.id,
                     noteId: note.id,
                     wmlInstrument: section.instrument,
                     tick: startTick,
@@ -37,6 +49,7 @@ export function buildPlaybackTimeline(project: WmlProject): PlaybackTimeline {
                     id: `${note.id}-off`,
                     type: "noteOff",
                     sectionId: section.id,
+                    chordId: chord.id,
                     noteId: note.id,
                     wmlInstrument: section.instrument,
                     tick: endTick,
@@ -67,6 +80,13 @@ export function buildPlaybackTimeline(project: WmlProject): PlaybackTimeline {
         return EVENT_ORDER[a.type] - EVENT_ORDER[b.type];
     });
 
+    if (lastNoteEndTick > 0) {
+        durationTick = Math.max(
+            durationTick,
+            getFollowingBarEndTick(lastNoteEndTick, project.timeSignatures),
+        );
+    }
+
     return {
         durationTick,
         duration: tickToSeconds(durationTick, project.tempos),
@@ -77,4 +97,17 @@ export function buildPlaybackTimeline(project: WmlProject): PlaybackTimeline {
 function clamp01(value: number): number {
     if (!Number.isFinite(value)) return 1;
     return Math.max(0, Math.min(1, value));
+}
+
+function getFollowingBarEndTick(tick: number, timeSignatures: WmlProject["timeSignatures"]) {
+    let bar = 0;
+    let barTick = 0;
+    const targetTick = Math.max(0, Math.round(tick));
+
+    while (barTick <= targetTick) {
+        bar += 1;
+        barTick = barToTick(bar, timeSignatures);
+    }
+
+    return barToTick(bar + 1, timeSignatures);
 }

@@ -1,6 +1,6 @@
 import { Midi } from "@tonejs/midi";
 import type { WmlProject, WmlSection, NoteEvent, Chord } from "../wml/wmlTypes";
-import { createId } from "../wml/wmlUtils";
+import { createId, tickToBar } from "../wml/wmlUtils";
 
 import { DEFAULT_INSTRUMENT_ID } from "../virtualInstrument/instrumentRegistry";
 import {
@@ -67,12 +67,19 @@ export function midiToWml(
         sections: [],
     };
 
-    project.timeSignatures = midi.header.timeSignatures.map((ts) => ({
-        id: createId("timesig"),
-        tick: Math.round(ts.ticks * ratio),
-        numerator: ts.timeSignature?.[0] ?? 4,
-        denominator: ts.timeSignature?.[1] ?? 4,
-    }));
+    project.timeSignatures = midi.header.timeSignatures
+        .map((ts) => ({
+            id: createId("timesig"),
+            tick: Math.round(ts.ticks * ratio),
+            numerator: ts.timeSignature?.[0] ?? 4,
+            denominator: ts.timeSignature?.[1] ?? 4,
+        }))
+        .map((ts, _index, events) => ({
+            id: ts.id,
+            bar: tickToBar(ts.tick, events),
+            numerator: ts.numerator,
+            denominator: ts.denominator,
+        }));
 
     project.tempos = midi.header.tempos.map((t) => ({
         id: createId("tempo"),
@@ -83,7 +90,7 @@ export function midiToWml(
     if (project.timeSignatures.length === 0) {
         project.timeSignatures.push({
             id: createId("timesig"),
-            tick: 0,
+            bar: 0,
             numerator: 4,
             denominator: 4,
         });

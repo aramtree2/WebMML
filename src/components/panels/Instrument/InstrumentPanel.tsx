@@ -12,14 +12,17 @@ import {
     renameSection,
 } from "../../../core/wml/wmlUtils";
 import {
+    getArrangementSelection,
     getChordControl,
     getSectionControl,
+    selectChord,
+    selectSection,
     subscribeArrangementControlState,
     toggleChordMute,
-    toggleChordSolo,
+    toggleChordSoloInSection,
     toggleChordVisible,
-    toggleSectionMute,
-    toggleSectionSolo,
+    toggleSectionMuteGroup,
+    toggleSectionSoloGroup,
     toggleSectionVisible,
 } from "../../../core/editor/arrangementControlStore";
 import {
@@ -63,6 +66,11 @@ export function InstrumentPanel() {
     const [editingSectionName, setEditingSectionName] = useState("");
 
     const instrumentDefs = useMemo(() => getAllInstrumentDefs(), []);
+    const selection = getArrangementSelection();
+    const sectionScopes = project.sections.map((section) => ({
+        sectionId: section.id,
+        chordIds: section.chords.map((chord) => chord.id),
+    }));
 
     useEffect(() => {
         const unsubscribeWml = subscribeWmlProject((nextProject) => {
@@ -367,15 +375,20 @@ export function InstrumentPanel() {
                 )}
 
                 {project.sections.map((section, sectionIndex) => {
-                    const sectionControl = getSectionControl(section.id);
+                    const chordIds = section.chords.map((chord) => chord.id);
+                    const sectionControl = getSectionControl(section.id, chordIds);
                     const collapsed = collapsedSections[section.id] ?? false;
                     const sectionInstrument = section.instrument || DEFAULT_INSTRUMENT_ID;
                     const sectionName = section.name || `Section ${sectionIndex + 1}`;
+                    const sectionSelected = selection.selectedSectionId === section.id;
 
                     return (
                         <section
                             key={section.id}
-                            style={styles.sectionCard}
+                            style={{
+                                ...styles.sectionCard,
+                                ...(sectionSelected ? styles.sectionCardSelected : null),
+                            }}
                             onContextMenu={(e) => openSectionContextMenu(e, section.id)}
                             onDragOver={allowDrop}
                             onDrop={(e) => {
@@ -399,6 +412,8 @@ export function InstrumentPanel() {
                                 sectionInstrument={sectionInstrument}
                                 instrumentDefs={instrumentDefs}
                                 control={sectionControl}
+                                selected={sectionSelected}
+                                onSelect={() => selectSection(section.id)}
                                 onStartEditName={() => startEditSectionName(section.id, sectionName)}
                                 onEditingNameChange={setEditingSectionName}
                                 onCommitEditName={commitEditSectionName}
@@ -416,9 +431,9 @@ export function InstrumentPanel() {
                                     });
                                 }}
                                 onDragEnd={finishDrop}
-                                onVisible={() => toggleSectionVisible(section.id)}
-                                onSolo={() => toggleSectionSolo(section.id)}
-                                onMute={() => toggleSectionMute(section.id)}
+                                onVisible={() => toggleSectionVisible(section.id, chordIds)}
+                                onSolo={() => toggleSectionSoloGroup(section.id, sectionScopes)}
+                                onMute={() => toggleSectionMuteGroup({ sectionId: section.id, chordIds })}
                             />
 
                             {!collapsed && (
@@ -444,6 +459,8 @@ export function InstrumentPanel() {
 
                                     {section.chords.map((chord, chordIndex) => {
                                         const chordControl = getChordControl(chord.id);
+                                        const chordSelected =
+                                            selection.selectedChordId === chord.id;
 
                                         return (
                                             <ChordRow
@@ -451,6 +468,8 @@ export function InstrumentPanel() {
                                                 chordIndex={chordIndex}
                                                 noteCount={chord.notes.length}
                                                 control={chordControl}
+                                                selected={chordSelected}
+                                                onSelect={() => selectChord(section.id, chord.id)}
                                                 onContextMenu={(e) =>
                                                     openChordContextMenu(e, section.id, chord.id)
                                                 }
@@ -475,7 +494,13 @@ export function InstrumentPanel() {
                                                     finishDrop();
                                                 }}
                                                 onVisible={() => toggleChordVisible(chord.id)}
-                                                onSolo={() => toggleChordSolo(chord.id)}
+                                                onSolo={() =>
+                                                    toggleChordSoloInSection(
+                                                        section.id,
+                                                        chord.id,
+                                                        chordIds,
+                                                    )
+                                                }
                                                 onMute={() => toggleChordMute(chord.id)}
                                             />
                                         );
@@ -521,6 +546,8 @@ type SectionHeaderProps = {
     sectionInstrument: string;
     instrumentDefs: Array<{ id: string; name: string }>;
     control: ControlState;
+    selected: boolean;
+    onSelect: () => void;
     onStartEditName: () => void;
     onEditingNameChange: (name: string) => void;
     onCommitEditName: () => void;
@@ -543,6 +570,8 @@ function SectionHeader({
     sectionInstrument,
     instrumentDefs,
     control,
+    selected,
+    onSelect,
     onStartEditName,
     onEditingNameChange,
     onCommitEditName,
@@ -556,7 +585,13 @@ function SectionHeader({
     onMute,
 }: SectionHeaderProps) {
     return (
-        <div style={styles.sectionHeader}>
+        <div
+            style={{
+                ...styles.sectionHeader,
+                ...(selected ? styles.sectionHeaderSelected : null),
+            }}
+            onClick={onSelect}
+        >
             <button
                 type="button"
                 style={styles.collapseButton}
@@ -630,6 +665,8 @@ type ChordRowProps = {
     chordIndex: number;
     noteCount: number;
     control: ControlState;
+    selected: boolean;
+    onSelect: () => void;
     onContextMenu: (e: MouseEvent<HTMLDivElement>) => void;
     onDragStart: (e: DragEvent<HTMLDivElement>) => void;
     onDragEnd: () => void;
@@ -644,6 +681,8 @@ function ChordRow({
     chordIndex,
     noteCount,
     control,
+    selected,
+    onSelect,
     onContextMenu,
     onDragStart,
     onDragEnd,
@@ -655,7 +694,11 @@ function ChordRow({
 }: ChordRowProps) {
     return (
         <div
-            style={styles.chordRow}
+            style={{
+                ...styles.chordRow,
+                ...(selected ? styles.chordRowSelected : null),
+            }}
+            onClick={onSelect}
             onContextMenu={onContextMenu}
             onDragOver={onDragOver}
             onDrop={onDrop}
@@ -705,7 +748,7 @@ function ControlButtons({
     onMute,
 }: ControlButtonsProps) {
     return (
-        <div style={styles.controls}>
+        <div style={styles.controls} onClick={(e) => e.stopPropagation()}>
             <button
                 type="button"
                 style={{
@@ -838,10 +881,16 @@ const styles: Record<string, CSSProperties> = {
         flex: "0 0 auto",
         minWidth: 0,
         border: "1px solid #cfcfcf",
+        borderColor: "#cfcfcf",
         borderRadius: "6px",
         background: "#ffffff",
         overflow: "hidden",
         boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
+    },
+    sectionCardSelected: {
+        borderColor: "#4d94cf",
+        background: "#f7fbff",
+        boxShadow: "0 0 0 1px rgba(77, 148, 207, 0.35)",
     },
     sectionHeader: {
         display: "grid",
@@ -852,6 +901,11 @@ const styles: Record<string, CSSProperties> = {
         padding: "10px",
         borderBottom: "1px solid #e5e7eb",
         background: "#fafafa",
+        cursor: "pointer",
+    },
+    sectionHeaderSelected: {
+        background: "#e8f0ff",
+        boxShadow: "inset 3px 0 0 #2563eb",
     },
     collapseButton: {
         width: "22px",
@@ -905,6 +959,7 @@ const styles: Record<string, CSSProperties> = {
         display: "flex",
         flexDirection: "column",
         minHeight: "44px",
+        background: "inherit",
     },
     chordRow: {
         display: "grid",
@@ -914,7 +969,12 @@ const styles: Record<string, CSSProperties> = {
         minWidth: 0,
         padding: "9px 10px",
         borderBottom: "1px solid #eeeeee",
-        background: "#ffffff",
+        background: "inherit",
+        cursor: "pointer",
+    },
+    chordRowSelected: {
+        background: "#fff7e8",
+        boxShadow: "inset 3px 0 0 #f59e0b",
     },
     chordDragHandle: {
         cursor: "grab",

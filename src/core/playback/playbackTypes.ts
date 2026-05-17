@@ -4,6 +4,7 @@ export type PlaybackNoteOnEvent = {
     id: string;
     type: "noteOn";
     sectionId: string;
+    chordId: string;
     noteId: string;
     wmlInstrument: string;
     tick: number;
@@ -16,6 +17,7 @@ export type PlaybackNoteOffEvent = {
     id: string;
     type: "noteOff";
     sectionId: string;
+    chordId: string;
     noteId: string;
     wmlInstrument: string;
     tick: number;
