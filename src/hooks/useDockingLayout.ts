@@ -1,5 +1,6 @@
 import type React from "react";
 import { useState } from "react";
+import { PANEL_IDS } from "../constants/panels";
 import type {
     DragInfo,
     EdgeDirection,
@@ -23,6 +24,12 @@ import {
     wrapLayoutByEdge,
 } from "../utils/layoutTree";
 
+const DEFAULT_HIDDEN_PANEL_IDS = [
+    PANEL_IDS.DEBUG_WML_JSON,
+    PANEL_IDS.DEBUG_AUDIO_OBJECT,
+    PANEL_IDS.DEBUG_WINDOW,
+];
+
 function collectPanelIds(node: LayoutNode): string[] {
     if (node.type === "tabs") return node.ids;
 
@@ -32,7 +39,9 @@ function collectPanelIds(node: LayoutNode): string[] {
 export function useDockingLayout(initialState: EditorLayoutState) {
     const [mainLayout, setMainLayout] = useState<LayoutNode>(initialState.mainLayout);
     const [floating, setFloating] = useState<FloatingWindow[]>(initialState.floating);
-    const [hiddenPanelIds, setHiddenPanelIds] = useState<Set<string>>(() => new Set());
+    const [hiddenPanelIds, setHiddenPanelIds] = useState<Set<string>>(
+        () => new Set(DEFAULT_HIDDEN_PANEL_IDS)
+    );
     const [dragInfo, setDragInfo] = useState<DragInfo>(null);
     const [dropPreview, setDropPreview] = useState<DropPreview>(null);
     const [edgePreview, setEdgePreview] = useState<EdgePreview>(null);

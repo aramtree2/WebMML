@@ -3,6 +3,9 @@ import "../../styles/MenuBar.css";
 import { PANEL_IDS, PANEL_TITLES, type PanelId } from "../../constants/panels";
 import type { DialogType } from "../../types/dialog";
 import type { DockingLayoutController } from "../../hooks/useDockingLayout";
+import { setWmlProject } from "../../core/wml/wmlStore";
+import { createEmptyProject } from "../../core/wml/wmlUtils";
+import { playbackEngine } from "../../core/playback";
 
 type MenuBarProps = {
     docking: DockingLayoutController;
@@ -57,6 +60,12 @@ export function MenuBar({ docking, onOpenDialog }: MenuBarProps) {
         closeMenu();
     };
 
+    const createNewProject = () => {
+        playbackEngine.stop();
+        setWmlProject(createEmptyProject());
+        closeMenu();
+    };
+
     return (
         <nav className="menu-bar" ref={menuRef} aria-label="주 메뉴">
             <div className="menu-wrapper">
@@ -71,7 +80,7 @@ export function MenuBar({ docking, onOpenDialog }: MenuBarProps) {
                 </button>
                 {openMenu === "file" && (
                     <div className="dropdown-menu" role="menu">
-                        <button className="menu-item" type="button" role="menuitem" onClick={() => { console.log("새로 만들기"); closeMenu(); }}>새로 만들기</button>
+                        <button className="menu-item" type="button" role="menuitem" onClick={createNewProject}>새로 만들기</button>
                         <button className="menu-item" type="button" role="menuitem" onClick={() => { console.log("열기"); closeMenu(); }}>열기</button>
                         <button className="menu-item" type="button" role="menuitem" onClick={() => { console.log("저장"); closeMenu(); }}>저장</button>
                         <div className="menu-separator" role="separator" />

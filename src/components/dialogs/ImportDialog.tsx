@@ -4,6 +4,7 @@ import { DialogFrame } from "./DialogFrame";
 
 import { setWmlProject } from "../../core/wml/wmlStore";
 import type { WmlProject } from "../../core/wml/wmlTypes";
+import { playbackEngine } from "../../core/playback";
 
 import { midiToWml } from "../../core/parser/midiToWml";
 import { mmlToWml, extractTracksInfo } from "../../core/parser/mmlToWml";
@@ -448,6 +449,7 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                 return;
             }
 
+            playbackEngine.stop();
             setWmlProject(wml);
             onClose();
         } catch (err) {
