@@ -128,3 +128,24 @@
 .section-cell:hover {
     background: #f0f4ff;
 }
+
+
+.save-wml-input {
+    width: 100%;
+    box-sizing: border-box;
+
+    padding: 10px 12px;
+
+    font-size: 15px;
+
+    border: 1px solid #c9c9d4;
+    border-radius: 8px;
+
+    outline: none;
+
+    margin-top: 10px;
+}
+
+.save-wml-input:focus {
+    border-color: #8b7dff;
+}

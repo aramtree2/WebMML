@@ -9,6 +9,8 @@ import { playbackEngine } from "../../core/playback";
 import { clearPaletteSelection } from "../../core/editor/paletteStore";
 import { clearArrangementSelection } from "../../core/editor/arrangementControlStore";
 
+
+
 type MenuBarProps = {
     docking: DockingLayoutController;
     onOpenDialog: (type: DialogType) => void;
@@ -85,8 +87,8 @@ export function MenuBar({ docking, onOpenDialog }: MenuBarProps) {
                 {openMenu === "file" && (
                     <div className="dropdown-menu" role="menu">
                         <button className="menu-item" type="button" role="menuitem" onClick={createNewProject}>새로 만들기</button>
-                        <button className="menu-item" type="button" role="menuitem" onClick={() => { console.log("열기"); closeMenu(); }}>열기</button>
-                        <button className="menu-item" type="button" role="menuitem" onClick={() => { console.log("저장"); closeMenu(); }}>저장</button>
+                        <button className="menu-item" type="button" role="menuitem" onClick={() => { openDialog("openWml") }}>열기</button>
+                        <button className="menu-item" type="button" role="menuitem" onClick={() => { openDialog("saveWml")}}>저장</button>
                         <div className="menu-separator" role="separator" />
                         <button className="menu-item" type="button" role="menuitem" onClick={() => openDialog("import")}>가져오기</button>
                         <button className="menu-item" type="button" role="menuitem" onClick={() => openDialog("export")}>내보내기</button>
@@ -131,18 +133,18 @@ export function MenuBar({ docking, onOpenDialog }: MenuBarProps) {
                             const isDisabled = isChecked && !docking.canHidePanel(panelId);
 
                             return (
-                            <label
-                                key={panelId}
-                                className={`dropdown-item checkbox-item${isDisabled ? " disabled" : ""}`}
-                            >
-                                <input 
-                                    type="checkbox" 
-                                    checked={isChecked}
-                                    disabled={isDisabled}
-                                    onChange={() => docking.togglePanelVisibility(panelId)}
-                                />
-                                <span>{PANEL_TITLES[panelId]}</span>
-                            </label>
+                                <label
+                                    key={panelId}
+                                    className={`dropdown-item checkbox-item${isDisabled ? " disabled" : ""}`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        disabled={isDisabled}
+                                        onChange={() => docking.togglePanelVisibility(panelId)}
+                                    />
+                                    <span>{PANEL_TITLES[panelId]}</span>
+                                </label>
                             );
                         })}
                         <div className="menu-separator" role="separator" />
@@ -192,4 +194,5 @@ export function MenuBar({ docking, onOpenDialog }: MenuBarProps) {
             </div>
         </nav>
     );
+
 }
