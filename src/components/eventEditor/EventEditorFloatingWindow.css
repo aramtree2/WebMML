@@ -112,6 +112,18 @@
     font: inherit;
 }
 
+.event-editor-checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #333333;
+    user-select: none;
+}
+
+.event-editor-checkbox-field input {
+    margin: 0;
+}
+
 .event-editor-fraction-divider {
     padding-bottom: 5px;
     color: #444;
@@ -124,13 +136,6 @@
     gap: 6px;
 }
 
-.event-editor-snap-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-}
-
-.event-editor-snap-actions button,
 .event-editor-actions button {
     height: 26px;
     padding: 0 10px;
@@ -142,18 +147,15 @@
     cursor: pointer;
 }
 
-.event-editor-snap-actions button:hover,
 .event-editor-actions button:hover {
     background: #e2e2e2;
 }
 
-.event-editor-snap-actions button:disabled,
 .event-editor-actions button:disabled {
     cursor: default;
     opacity: 0.45;
 }
 
-.event-editor-snap-actions button:disabled:hover,
 .event-editor-actions button:disabled:hover {
     background: #eeeeee;
 }

@@ -15,11 +15,34 @@
     position: absolute;
     left: 0;
     top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
     box-sizing: border-box;
     border-right: 1px solid #bdbdbd;
     border-bottom: 1px solid #c8c8c8;
     background: #e6e6e6;
     z-index: 4;
+}
+
+.piano-roll-grid-unit-select {
+    width: 100%;
+    min-width: 0;
+    height: 24px;
+    padding: 1px 3px;
+    border: 1px solid #b9b9b9;
+    border-radius: 3px;
+    background: #f8f8f8;
+    color: #333333;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.piano-roll-grid-unit-select:focus {
+    outline: 1px solid #6aa7d8;
+    outline-offset: 0;
 }
 
 .piano-roll-time-header {
@@ -54,6 +77,13 @@
     border-left-color: #aaaaaa;
     color: #333;
     font-weight: 600;
+}
+
+.piano-roll-beat-subdivision-label {
+    position: absolute;
+    box-sizing: border-box;
+    border-left: 1px dashed rgba(160, 160, 160, 0.45);
+    pointer-events: none;
 }
 
 .piano-roll-measure-label {
@@ -203,10 +233,13 @@
     min-height: 0;
     overflow: auto;
     background: #ffffff;
+    user-select: none;
 }
 
 .piano-roll-grid {
     position: relative;
+    user-select: none;
+    touch-action: none;
 }
 
 .piano-roll-row {
@@ -237,6 +270,11 @@
     background: #dddddd;
 }
 
+.piano-roll-grid-line.subdivision-line {
+    border-left: 1px dashed rgba(160, 160, 160, 0.45);
+    background: transparent;
+}
+
 .piano-roll-grid-line.measure-line {
     background: #aaaaaa;
 }
@@ -247,6 +285,7 @@
     border: 1px solid #6b7f95;
     border-radius: 3px;
     background: #8fa3b8;
+    user-select: none;
 }
 
 .piano-roll-note.section-selected {
@@ -261,6 +300,42 @@
     background: #f59e0b;
     box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.36);
     z-index: 3;
+}
+
+.piano-roll-note.note-selected {
+    border-color: #be185d;
+    background: #f472b6;
+    box-shadow: 0 0 0 2px rgba(244, 114, 182, 0.42);
+    z-index: 4;
+}
+
+.piano-roll-note-preview {
+    position: absolute;
+    box-sizing: border-box;
+    border: 1px solid rgba(190, 24, 93, 0.5);
+    border-radius: 3px;
+    background: rgba(244, 114, 182, 0.32);
+    pointer-events: none;
+    z-index: 6;
+}
+
+.piano-roll-velocity-label {
+    position: absolute;
+    color: #111111;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 600;
+    pointer-events: none;
+    text-shadow:
+        -1px -1px 0 #ffffff,
+        0 -1px 0 #ffffff,
+        1px -1px 0 #ffffff,
+        -1px 0 0 #ffffff,
+        1px 0 0 #ffffff,
+        -1px 1px 0 #ffffff,
+        0 1px 0 #ffffff,
+        1px 1px 0 #ffffff;
+    z-index: 7;
 }
 
 .piano-roll-time-header {

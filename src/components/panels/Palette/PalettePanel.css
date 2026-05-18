@@ -1,0 +1,101 @@
+.palette-panel {
+    display: block;
+    align-items: initial;
+    justify-content: initial;
+    padding: 8px;
+    box-sizing: border-box;
+    overflow: auto;
+    background: #ffffff;
+    color: #222222;
+    font-size: 12px;
+}
+
+.palette-section {
+    min-width: 0;
+}
+
+.palette-section-title {
+    height: 24px;
+    display: flex;
+    align-items: center;
+    padding: 0 2px;
+    box-sizing: border-box;
+    color: #222222;
+    font-weight: 600;
+}
+
+.palette-tool-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-content: flex-start;
+}
+
+.palette-divider {
+    height: 1px;
+    margin: 10px 0 6px;
+    background: #d7d7d7;
+}
+
+.palette-tool-button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 45px;
+    width: 45px;
+    height: 45px;
+    padding: 0;
+    box-sizing: border-box;
+    border: 1px solid #c8c8c8;
+    border-radius: 6px;
+    background: #f7f7f7;
+    color: #202020;
+    font: inherit;
+    cursor: pointer;
+    user-select: none;
+}
+
+.palette-tool-button:hover:not(:disabled) {
+    border-color: #9aaec8;
+    background: #eef4fb;
+}
+
+.palette-tool-button.selected {
+    border-color: #2563eb;
+    background: #e8f0ff;
+    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.42);
+}
+
+.palette-tool-button:disabled {
+    color: #9a9a9a;
+    background: #f0f0f0;
+    cursor: default;
+    opacity: 0.72;
+}
+
+.palette-tool-icon-wrap {
+    width: 40px;
+    height: 40px;
+}
+
+.palette-sprite-icon {
+    display: block;
+    width: 40px;
+    height: 40px;
+    background-repeat: no-repeat;
+}
+
+.palette-tool-button:disabled .palette-sprite-icon {
+    opacity: 0.68;
+}
+
+.palette-command-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.palette-command-grid {
+    flex-wrap: nowrap;
+}

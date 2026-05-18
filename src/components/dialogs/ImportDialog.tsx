@@ -5,6 +5,8 @@ import { DialogFrame } from "./DialogFrame";
 import { setWmlProject } from "../../core/wml/wmlStore";
 import type { WmlProject } from "../../core/wml/wmlTypes";
 import { playbackEngine } from "../../core/playback";
+import { clearPaletteSelection } from "../../core/editor/paletteStore";
+import { clearArrangementSelection } from "../../core/editor/arrangementControlStore";
 
 import { midiToWml } from "../../core/parser/midiToWml";
 import { mmlToWml, extractTracksInfo } from "../../core/parser/mmlToWml";
@@ -450,6 +452,8 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             }
 
             playbackEngine.stop();
+            clearArrangementSelection();
+            clearPaletteSelection();
             setWmlProject(wml);
             onClose();
         } catch (err) {

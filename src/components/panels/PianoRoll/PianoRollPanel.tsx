@@ -1,13 +1,19 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
     getArrangementControlState,
+    selectNote,
     subscribeArrangementControlState,
 } from "../../../core/editor/arrangementControlStore";
+import {
+    getPaletteState,
+    subscribePaletteState,
+} from "../../../core/editor/paletteStore";
 import { EventEditorFloatingWindow } from "../../eventEditor";
 import type { EventEditorAnchor, EventEditorTarget } from "../../eventEditor";
 import { playbackEngine, secondsToTick, tickToSeconds } from "../../../core/playback";
 import { getWmlProject, subscribeWmlProject, updateWmlProject } from "../../../core/wml/wmlStore";
 import { createId } from "../../../core/wml/wmlUtils";
+import type { NoteEvent } from "../../../core/wml/wmlTypes";
 import type { TimeSignatureEvent } from "../../../core/wml/wmlTypes";
 import type { TempoEvent } from "../../../core/wml/wmlTypes";
 import { wmlProjectToPianoRollData } from "./pianoRollMapper";
@@ -35,9 +41,11 @@ const TIMELINE_EXTENSION_BEAT_COUNT = 64;
 const TIMELINE_EXTENSION_THRESHOLD_RATIO = 0.75;
 const MIN_TIMELINE_TRAILING_WIDTH = 900;
 const TIMELINE_PRUNE_EXTRA_WIDTH = 2400;
+const NOTE_CYCLE_CLICK_DELAY_MS = 180;
 
 const AUTO_SCROLL_RIGHT_RATIO = 0.75;
 const AUTO_SCROLL_LEFT_RATIO = 0.15;
+const GRID_SUBDIVISION_OPTIONS = [0, 1, 2, 4, 8, 16, 32] as const;
 
 type PianoRollRow = {
     midi: number;
@@ -68,11 +76,39 @@ type PianoRollBeatView = {
     isMeasureStart: boolean;
 };
 
+type PianoRollSubdivisionView = {
+    key: string;
+    startBeat: number;
+};
+
+type PianoRollNotePreview = {
+    midi: number;
+    tick: number;
+    durationTick: number;
+};
+
+type PianoRollVelocityLabelView = {
+    key: string;
+    midi: number;
+    tick: number;
+    velocity: number;
+};
+
+type PianoRollNoteDraft = {
+    midi: number;
+    startTick: number;
+    unitTick: number;
+    sectionId: string;
+    chordId: string;
+    pointerId: number;
+};
+
 const pianoRollViewState = {
     scrollLeft: 0,
     scrollTop: 0,
     zoomX: 1,
     zoomY: 1,
+    gridSubdivision: 1,
 };
 
 export function PianoRollPanel() {
@@ -80,17 +116,23 @@ export function PianoRollPanel() {
     const scrollAreaRef = useRef<HTMLDivElement | null>(null);
     const restoredViewStateRef = useRef(false);
     const focusedSelectionRef = useRef<string | null>(null);
+    const pendingNoteCycleTimerRef = useRef<number | null>(null);
+    const noteDraftRef = useRef<PianoRollNoteDraft | null>(null);
 
     const [project, setProject] = useState(() => getWmlProject());
     const [arrangementControls, setArrangementControls] = useState(() =>
         getArrangementControlState(),
     );
+    const [paletteState, setPaletteState] = useState(() => getPaletteState());
     const [playbackSnapshot, setPlaybackSnapshot] = useState(() => playbackEngine.getSnapshot());
 
     const [scrollLeft, setScrollLeft] = useState(() => pianoRollViewState.scrollLeft);
     const [scrollTop, setScrollTop] = useState(() => pianoRollViewState.scrollTop);
     const [zoomX, setZoomX] = useState(() => pianoRollViewState.zoomX);
     const [zoomY, setZoomY] = useState(() => pianoRollViewState.zoomY);
+    const [gridSubdivision, setGridSubdivision] = useState(
+        () => pianoRollViewState.gridSubdivision,
+    );
     const [editorTarget, setEditorTarget] = useState<EventEditorTarget | null>(null);
     const [editorAnchor, setEditorAnchor] = useState<EventEditorAnchor | null>(null);
     const [editorBounds, setEditorBounds] = useState<{ width: number; height: number } | null>(
@@ -99,6 +141,7 @@ export function PianoRollPanel() {
     const [tempoPreviewTick, setTempoPreviewTick] = useState<number | null>(null);
     const [isTempoMarkerHovered, setIsTempoMarkerHovered] = useState(false);
     const [timelineBeatCount, setTimelineBeatCount] = useState(INITIAL_TIMELINE_BEAT_COUNT);
+    const [notePreview, setNotePreview] = useState<PianoRollNotePreview | null>(null);
 
     const rows = useMemo(() => createNoteRows(), []);
     const pianoRollData = useMemo(
@@ -107,6 +150,8 @@ export function PianoRollPanel() {
     );
     const selectedSectionId = arrangementControls.selectedSectionId;
     const selectedChordId = arrangementControls.selectedChordId;
+    const selectedNoteId = arrangementControls.selectedNoteId;
+    const selectedPaletteItem = paletteState.selectedItem;
 
     const rowHeight = BASE_ROW_HEIGHT * zoomY;
     const beatWidth = BASE_BEAT_WIDTH * zoomX;
@@ -134,6 +179,14 @@ export function PianoRollPanel() {
     const beatViews = useMemo(
         () => createBeatViews(measureViews, contentBeatCount),
         [measureViews, contentBeatCount],
+    );
+    const subdivisionViews = useMemo(
+        () => createSubdivisionViews(beatViews, gridSubdivision),
+        [beatViews, gridSubdivision],
+    );
+    const velocityLabelViews = useMemo(
+        () => createVelocityLabelViews(pianoRollData.notes, selectedChordId),
+        [pianoRollData.notes, selectedChordId],
     );
 
     const contentWidth = contentBeatCount * beatWidth;
@@ -229,6 +282,17 @@ export function PianoRollPanel() {
         });
     };
 
+    const updateGridSubdivision = (value: number) => {
+        const next = GRID_SUBDIVISION_OPTIONS.includes(
+            value as (typeof GRID_SUBDIVISION_OPTIONS)[number],
+        )
+            ? value
+            : 1;
+
+        pianoRollViewState.gridSubdivision = next;
+        setGridSubdivision(next);
+    };
+
     useLayoutEffect(() => {
         return subscribeWmlProject((nextProject) => {
             setProject(nextProject);
@@ -242,9 +306,21 @@ export function PianoRollPanel() {
     }, []);
 
     useEffect(() => {
+        return subscribePaletteState((nextState) => {
+            setPaletteState(nextState);
+        });
+    }, []);
+
+    useEffect(() => {
         return playbackEngine.subscribe((snapshot) => {
             setPlaybackSnapshot(snapshot);
         });
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            clearPendingNoteCycle();
+        };
     }, []);
 
     useLayoutEffect(() => {
@@ -465,8 +541,280 @@ export function PianoRollPanel() {
         const header = e.currentTarget;
         const rect = header.getBoundingClientRect();
         const x = e.clientX - rect.left + scrollLeft;
+        const tick = snapTickToGrid(
+            xToTick(x, ticksPerBeat, beatWidth),
+            ticksPerBeat,
+            gridSubdivision,
+        );
 
-        setTempoPreviewTick(Math.round(xToTick(x, ticksPerBeat, beatWidth)));
+        setTempoPreviewTick(tick);
+    };
+
+    const clearPendingNoteCycle = () => {
+        if (pendingNoteCycleTimerRef.current == null) return;
+
+        window.clearTimeout(pendingNoteCycleTimerRef.current);
+        pendingNoteCycleTimerRef.current = null;
+    };
+
+    const selectNoteAtPointer = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.detail >= 2) return;
+
+        clearPendingNoteCycle();
+
+        const hitPoint = getNoteHitPoint(e);
+        if (!hitPoint) return;
+
+        const candidates = getSelectableNoteCandidatesAtPoint(
+            pianoRollData.notes,
+            hitPoint.x,
+            hitPoint.y,
+            rows,
+            rowHeight,
+            ticksPerBeat,
+            beatWidth,
+            selectedSectionId,
+            selectedChordId,
+        );
+        const selectedIndex = candidates.findIndex((note) => note.id === selectedNoteId);
+        const note =
+            selectedIndex >= 0 && candidates.length > 1
+                ? candidates[(selectedIndex + 1) % candidates.length]
+                : candidates[0];
+
+        if (!note?.sectionId || !note.chordId) return;
+        const sectionId = note.sectionId;
+        const chordId = note.chordId;
+        const noteId = note.id;
+
+        if (selectedIndex >= 0 && candidates.length > 1) {
+            pendingNoteCycleTimerRef.current = window.setTimeout(() => {
+                selectNote(sectionId, chordId, noteId);
+                pendingNoteCycleTimerRef.current = null;
+            }, NOTE_CYCLE_CLICK_DELAY_MS);
+            return;
+        }
+
+        selectNote(sectionId, chordId, noteId);
+    };
+
+    const openNoteEditorAtPointer = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearPendingNoteCycle();
+
+        const hitPoint = getNoteHitPoint(e);
+        if (!hitPoint) return;
+
+        const note = findSelectedOrSelectableNoteAtPoint(
+            pianoRollData.notes,
+            hitPoint.x,
+            hitPoint.y,
+            rows,
+            rowHeight,
+            ticksPerBeat,
+            beatWidth,
+            selectedSectionId,
+            selectedChordId,
+            selectedNoteId,
+        );
+        if (!note?.sectionId || !note.chordId) return;
+
+        selectNote(note.sectionId, note.chordId, note.id);
+
+        const panelRect = panelRef.current?.getBoundingClientRect();
+
+        setEditorTarget({
+            type: "note",
+            noteId: note.id,
+            sectionId: note.sectionId,
+            chordId: note.chordId,
+        });
+        setEditorAnchor(
+            panelRect
+                ? {
+                      x: e.clientX - panelRect.left + 8,
+                      y: e.clientY - panelRect.top + 8,
+                  }
+                : null,
+        );
+        setEditorBounds(
+            panelRect
+                ? {
+                      width: panelRect.width,
+                      height: panelRect.height,
+                  }
+                : null,
+        );
+    };
+
+    const getNoteHitPoint = (e: React.MouseEvent<HTMLDivElement>) => {
+        const scrollArea = scrollAreaRef.current;
+        if (!scrollArea) return null;
+
+        const rect = scrollArea.getBoundingClientRect();
+
+        return {
+            x: e.clientX - rect.left + scrollArea.scrollLeft,
+            y: e.clientY - rect.top + scrollArea.scrollTop,
+        };
+    };
+
+    const updateNotePreview = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (e.target instanceof Element && e.target.closest(".piano-roll-note")) {
+            setNotePreview(null);
+            return;
+        }
+
+        if (noteDraftRef.current) {
+            updateNoteDraftPreview(e);
+            return;
+        }
+
+        const preview = getNotePreviewAtPointer(e);
+
+        if (!preview) {
+            setNotePreview(null);
+            return;
+        }
+
+        setNotePreview(preview);
+    };
+
+    const getNotePreviewAtPointer = (
+        e: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
+    ): PianoRollNotePreview | null => {
+        if (
+            selectedSectionId == null ||
+            selectedChordId == null ||
+            selectedPaletteItem?.type !== "note-duration"
+        ) {
+            return null;
+        }
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left + e.currentTarget.scrollLeft;
+        const y = e.clientY - rect.top + e.currentTarget.scrollTop;
+        const row = rows[Math.floor(y / rowHeight)];
+
+        if (!row) {
+            return null;
+        }
+
+        return {
+            midi: row.midi,
+            tick: snapTickToGrid(xToTick(x, ticksPerBeat, beatWidth), ticksPerBeat, gridSubdivision),
+            durationTick: getPaletteNoteDurationTick(selectedPaletteItem.denominator, ticksPerBeat),
+        };
+    };
+
+    const beginNoteDraft = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+
+        const preview = getNotePreviewAtPointer(e);
+        if (!preview || selectedSectionId == null || selectedChordId == null) return;
+
+        noteDraftRef.current = {
+            midi: preview.midi,
+            startTick: preview.tick,
+            unitTick: preview.durationTick,
+            sectionId: selectedSectionId,
+            chordId: selectedChordId,
+            pointerId: e.pointerId,
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setNotePreview(preview);
+    };
+
+    const updateNoteDraftPreview = (e: React.PointerEvent<HTMLDivElement>) => {
+        const draft = noteDraftRef.current;
+        if (!draft) return;
+        e.preventDefault();
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left + e.currentTarget.scrollLeft;
+        const tick = snapTickToGrid(xToTick(x, ticksPerBeat, beatWidth), ticksPerBeat, gridSubdivision);
+        const durationTick = getDraftDurationTick(draft.startTick, tick, draft.unitTick);
+
+        setNotePreview({
+            midi: draft.midi,
+            tick: draft.startTick,
+            durationTick,
+        });
+    };
+
+    const commitNoteDraft = (e: React.PointerEvent<HTMLDivElement>) => {
+        const draft = noteDraftRef.current;
+        if (!draft || draft.pointerId !== e.pointerId) return;
+        e.preventDefault();
+
+        updateNoteDraftPreview(e);
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left + e.currentTarget.scrollLeft;
+        const tick = snapTickToGrid(xToTick(x, ticksPerBeat, beatWidth), ticksPerBeat, gridSubdivision);
+        const durationTick = getDraftDurationTick(draft.startTick, tick, draft.unitTick);
+        noteDraftRef.current = null;
+
+        if (durationTick <= 0) {
+            setNotePreview(null);
+            return;
+        }
+
+        const noteId = createId("note");
+
+        updateWmlProject((prev) => ({
+            ...prev,
+            sections: prev.sections.map((section) =>
+                section.id === draft.sectionId
+                    ? {
+                          ...section,
+                          chords: section.chords.map((chord) =>
+                              chord.id === draft.chordId
+                                  ? {
+                                        ...chord,
+                                        notes: [
+                                            ...chord.notes,
+                                            {
+                                                id: noteId,
+                                                pitch: draft.midi,
+                                                tick: draft.startTick,
+                                                duration: durationTick,
+                                                velocity: getPreviousVelocityForTick(
+                                                    chord.notes,
+                                                    draft.startTick,
+                                                ),
+                                            },
+                                        ].sort((a, b) => a.tick - b.tick || a.pitch - b.pitch),
+                                    }
+                                  : chord,
+                          ),
+                      }
+                    : section,
+            ),
+        }));
+        selectNote(draft.sectionId, draft.chordId, noteId);
+    };
+
+    const cancelNoteDraft = (e: React.PointerEvent<HTMLDivElement>) => {
+        const draft = noteDraftRef.current;
+        e.preventDefault();
+        if (!draft || draft.pointerId !== e.pointerId) {
+            setNotePreview(null);
+            return;
+        }
+
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+        noteDraftRef.current = null;
+        setNotePreview(null);
     };
 
     const openTimeSignatureEditor = (
@@ -515,8 +863,6 @@ export function PianoRollPanel() {
             type: "tempo",
             tick: tempo.tick,
             eventId: tempo.id,
-            originalTick: tempo.tick,
-            originalBpm: tempo.bpm,
         });
         setEditorAnchor(
             panelRect
@@ -546,21 +892,6 @@ export function PianoRollPanel() {
                 ...prev,
                 tempos: prev.tempos.filter((tempo) => tempo.id !== editorTarget.eventId),
             }));
-        } else if (editorTarget?.type === "tempo" && editorTarget.eventId != null) {
-            updateWmlProject((prev) => ({
-                ...prev,
-                tempos: prev.tempos
-                    .map((tempo) =>
-                        tempo.id === editorTarget.eventId
-                            ? {
-                                  ...tempo,
-                                  tick: editorTarget.originalTick ?? tempo.tick,
-                                  bpm: editorTarget.originalBpm ?? tempo.bpm,
-                              }
-                            : tempo,
-                    )
-                    .sort((a, b) => a.tick - b.tick),
-            }));
         }
 
         closeEventEditor();
@@ -578,7 +909,11 @@ export function PianoRollPanel() {
 
         const headerRect = header.getBoundingClientRect();
         const x = e.clientX - headerRect.left + scrollLeft;
-        const tick = Math.round(xToTick(x, ticksPerBeat, beatWidth));
+        const tick = snapTickToGrid(
+            xToTick(x, ticksPerBeat, beatWidth),
+            ticksPerBeat,
+            gridSubdivision,
+        );
         const id = createId("tempo");
         const bpm = getTempoAtTick(project.tempos, tick);
 
@@ -599,8 +934,6 @@ export function PianoRollPanel() {
             tick,
             eventId: id,
             isNew: true,
-            originalTick: tick,
-            originalBpm: bpm,
         });
         setEditorAnchor(
             panelRect
@@ -628,7 +961,26 @@ export function PianoRollPanel() {
                     width: KEYBOARD_WIDTH,
                     height: HEADER_HEIGHT,
                 }}
-            />
+            >
+                <select
+                    className="piano-roll-grid-unit-select"
+                    value={gridSubdivision}
+                    title="그리드 단위"
+                    aria-label="그리드 단위"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onChange={(e) => updateGridSubdivision(Number(e.target.value))}
+                >
+                    {GRID_SUBDIVISION_OPTIONS.map((division) => (
+                        <option key={division} value={division}>
+                            {division === 0
+                                ? "스냅 없음"
+                                : division === 1
+                                  ? "1박"
+                                  : `1/${division}박`}
+                        </option>
+                    ))}
+                </select>
+            </div>
 
             <div
                 className="piano-roll-time-header"
@@ -689,6 +1041,18 @@ export function PianoRollPanel() {
                             }}
                         >
                         </div>
+                    ))}
+
+                    {subdivisionViews.map((subdivision) => (
+                        <div
+                            key={subdivision.key}
+                            className="piano-roll-beat-subdivision-label"
+                            style={{
+                                left: subdivision.startBeat * beatWidth,
+                                top: HEADER_LANE_HEIGHT,
+                                height: HEADER_LANE_HEIGHT,
+                            }}
+                        />
                     ))}
 
                     {project.tempos.map((tempo) => (
@@ -801,9 +1165,16 @@ export function PianoRollPanel() {
                     ref={scrollAreaRef}
                     className="piano-roll-scroll-area"
                     onScroll={syncScrollState}
+                    onPointerMove={updateNotePreview}
+                    onPointerLeave={() => {
+                        if (!noteDraftRef.current) setNotePreview(null);
+                    }}
                 >
                     <div
                         className="piano-roll-grid"
+                        onPointerDown={beginNoteDraft}
+                        onPointerUp={commitNoteDraft}
+                        onPointerCancel={cancelNoteDraft}
                         style={{
                             width: contentWidth,
                             height: contentHeight,
@@ -821,6 +1192,14 @@ export function PianoRollPanel() {
                                     top: index * rowHeight,
                                     height: rowHeight,
                                 }}
+                            />
+                        ))}
+
+                        {subdivisionViews.map((subdivision) => (
+                            <div
+                                key={subdivision.key}
+                                className="piano-roll-grid-line subdivision-line"
+                                style={{ left: subdivision.startBeat * beatWidth }}
                             />
                         ))}
 
@@ -844,10 +1223,12 @@ export function PianoRollPanel() {
                                 selectedChordId != null && note.chordId === selectedChordId;
                             const isSelectedSection =
                                 selectedSectionId != null && note.sectionId === selectedSectionId;
+                            const isSelectedNote = selectedNoteId === note.id;
                             const noteClassName = [
                                 "piano-roll-note",
                                 isSelectedSection ? "section-selected" : "",
                                 isSelectedChord ? "chord-selected" : "",
+                                isSelectedNote ? "note-selected" : "",
                             ]
                                 .filter(Boolean)
                                 .join(" ");
@@ -859,6 +1240,9 @@ export function PianoRollPanel() {
                                     data-note-id={note.id}
                                     data-section-id={note.sectionId ?? undefined}
                                     data-chord-id={note.chordId ?? undefined}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={selectNoteAtPointer}
+                                    onDoubleClick={openNoteEditorAtPointer}
                                     style={{
                                         left: tickToX(note.startTick, ticksPerBeat, beatWidth),
                                         top: y + 2,
@@ -872,6 +1256,46 @@ export function PianoRollPanel() {
                                 />
                             );
                         })}
+
+                        {velocityLabelViews.map((label) => {
+                            const y = noteToY(label.midi, rows, rowHeight);
+                            if (y == null) return null;
+
+                            return (
+                                <div
+                                    key={label.key}
+                                    className="piano-roll-velocity-label"
+                                    style={{
+                                        left: tickToX(label.tick, ticksPerBeat, beatWidth),
+                                        top: Math.max(0, y - 15),
+                                    }}
+                                >
+                                    V{label.velocity}
+                                </div>
+                            );
+                        })}
+
+                        {notePreview != null && (
+                            <div
+                                className="piano-roll-note-preview"
+                                style={{
+                                    left: tickToX(notePreview.tick, ticksPerBeat, beatWidth),
+                                    top: (noteToY(notePreview.midi, rows, rowHeight) ?? 0) + 2,
+                                    width:
+                                        notePreview.durationTick > 0
+                                            ? Math.max(
+                                                  tickToWidth(
+                                                      notePreview.durationTick,
+                                                      ticksPerBeat,
+                                                      beatWidth,
+                                                  ),
+                                                  4,
+                                              )
+                                            : 0,
+                                    height: Math.max(rowHeight - 4, 4),
+                                }}
+                            />
+                        )}
 
                         {playbackEndLeft != null && (
                             <div
@@ -1004,6 +1428,146 @@ function xToTick(x: number, ticksPerBeat: number, beatWidth: number) {
     return Math.max(0, x / beatWidth * ticksPerBeat);
 }
 
+function snapTickToGrid(tick: number, ticksPerBeat: number, subdivision: number) {
+    const roundedTick = Math.max(0, Math.round(tick));
+    if (subdivision <= 0) return roundedTick;
+
+    const unitTick = ticksPerBeat / subdivision;
+    if (unitTick <= 0) return roundedTick;
+
+    return Math.max(0, Math.round(Math.floor(tick / unitTick) * unitTick));
+}
+
+function getPaletteNoteDurationTick(denominator: number, ticksPerBeat: number) {
+    return Math.max(1, Math.round(ticksPerBeat * 4 / denominator));
+}
+
+function createVelocityLabelViews(
+    notes: PianoRollNoteView[],
+    selectedChordId: string | null,
+): PianoRollVelocityLabelView[] {
+    if (selectedChordId == null) return [];
+
+    const selectedNotes = notes.filter((note) => note.chordId === selectedChordId);
+    const result: PianoRollVelocityLabelView[] = [];
+    let previousVelocity: number | null = null;
+
+    for (const note of selectedNotes) {
+        const velocity = normalizeVelocityForLabel(note.velocity);
+        if (previousVelocity !== velocity) {
+            result.push({
+                key: note.id,
+                midi: note.midi,
+                tick: note.startTick,
+                velocity,
+            });
+        }
+
+        previousVelocity = velocity;
+    }
+
+    return result;
+}
+
+function normalizeVelocityForLabel(value: number | undefined) {
+    if (value == null || !Number.isFinite(value)) return 8;
+
+    return Math.max(0, Math.min(15, Math.round(value)));
+}
+
+function getPreviousVelocityForTick(notes: NoteEvent[], tick: number) {
+    const previousNote = [...notes]
+        .filter((note) => note.tick <= tick)
+        .sort((a, b) => a.tick - b.tick || a.pitch - b.pitch)
+        .at(-1);
+
+    return normalizeVelocityForLabel(previousNote?.velocity);
+}
+
+function getDraftDurationTick(startTick: number, currentTick: number, unitTick: number) {
+    if (currentTick < startTick) return 0;
+
+    return Math.max(unitTick, (Math.floor((currentTick - startTick) / unitTick) + 1) * unitTick);
+}
+
+function findSelectedOrSelectableNoteAtPoint(
+    notes: PianoRollNoteView[],
+    x: number,
+    y: number,
+    rows: PianoRollRow[],
+    rowHeight: number,
+    ticksPerBeat: number,
+    beatWidth: number,
+    selectedSectionId: string | null,
+    selectedChordId: string | null,
+    selectedNoteId: string | null,
+) {
+    const candidates = getSelectableNoteCandidatesAtPoint(
+        notes,
+        x,
+        y,
+        rows,
+        rowHeight,
+        ticksPerBeat,
+        beatWidth,
+        selectedSectionId,
+        selectedChordId,
+    );
+
+    return candidates.find((note) => note.id === selectedNoteId) ?? candidates[0] ?? null;
+}
+
+function getSelectableNoteCandidatesAtPoint(
+    notes: PianoRollNoteView[],
+    x: number,
+    y: number,
+    rows: PianoRollRow[],
+    rowHeight: number,
+    ticksPerBeat: number,
+    beatWidth: number,
+    selectedSectionId: string | null,
+    selectedChordId: string | null,
+) {
+    return notes.filter((note) =>
+        isPointInsideNote(note, x, y, rows, rowHeight, ticksPerBeat, beatWidth),
+    ).sort(
+        (a, b) =>
+            getNoteSelectionPriority(a, selectedSectionId, selectedChordId) -
+            getNoteSelectionPriority(b, selectedSectionId, selectedChordId),
+    );
+}
+
+function isPointInsideNote(
+    note: PianoRollNoteView,
+    x: number,
+    y: number,
+    rows: PianoRollRow[],
+    rowHeight: number,
+    ticksPerBeat: number,
+    beatWidth: number,
+) {
+    const noteY = noteToY(note.midi, rows, rowHeight);
+    if (noteY == null) return false;
+
+    const left = tickToX(note.startTick, ticksPerBeat, beatWidth);
+    const right = left + Math.max(tickToWidth(note.durationTick, ticksPerBeat, beatWidth), 4);
+    const top = noteY + 2;
+    const bottom = top + Math.max(rowHeight - 4, 4);
+
+    return x >= left && x <= right && y >= top && y <= bottom;
+}
+
+function getNoteSelectionPriority(
+    note: PianoRollNoteView,
+    selectedSectionId: string | null,
+    selectedChordId: string | null,
+) {
+    if (selectedChordId != null && note.chordId === selectedChordId) return 0;
+    if (selectedSectionId != null && note.sectionId === selectedSectionId) return 1;
+
+    return 2;
+}
+
 function createMeasureViews(
     timeSignatures: TimeSignatureEvent[],
     totalBeatCount: number,
@@ -1077,6 +1641,30 @@ function createBeatViews(
             });
 
             label += 1;
+        }
+    }
+
+    return result;
+}
+
+function createSubdivisionViews(
+    beats: PianoRollBeatView[],
+    subdivision: number,
+): PianoRollSubdivisionView[] {
+    if (subdivision <= 1) return [];
+
+    const result: PianoRollSubdivisionView[] = [];
+
+    for (const beat of beats) {
+        const unitBeatLength = beat.beatLength / subdivision;
+
+        for (let index = 1; index < subdivision; index += 1) {
+            const startBeat = beat.startBeat + unitBeatLength * index;
+
+            result.push({
+                key: `${beat.key}-${index}`,
+                startBeat,
+            });
         }
     }
 

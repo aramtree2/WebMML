@@ -9,6 +9,7 @@ export type ArrangementControlState = {
     chords: Record<string, ArrangementItemControl>;
     selectedSectionId: string | null;
     selectedChordId: string | null;
+    selectedNoteId: string | null;
 };
 
 export type ArrangementSectionScope = {
@@ -27,6 +28,7 @@ let state: ArrangementControlState = {
     chords: {},
     selectedSectionId: null,
     selectedChordId: null,
+    selectedNoteId: null,
 };
 
 const listeners = new Set<(state: ArrangementControlState) => void>();
@@ -74,7 +76,27 @@ export function getArrangementSelection() {
     return {
         selectedSectionId: state.selectedSectionId,
         selectedChordId: state.selectedChordId,
+        selectedNoteId: state.selectedNoteId,
     };
+}
+
+export function clearArrangementSelection() {
+    if (
+        state.selectedSectionId == null &&
+        state.selectedChordId == null &&
+        state.selectedNoteId == null
+    ) {
+        return;
+    }
+
+    state = {
+        ...state,
+        selectedSectionId: null,
+        selectedChordId: null,
+        selectedNoteId: null,
+    };
+
+    emit();
 }
 
 export function selectSection(sectionId: string) {
@@ -82,6 +104,7 @@ export function selectSection(sectionId: string) {
         ...state,
         selectedSectionId: sectionId,
         selectedChordId: null,
+        selectedNoteId: null,
     };
 
     emit();
@@ -92,6 +115,18 @@ export function selectChord(sectionId: string, chordId: string) {
         ...state,
         selectedSectionId: sectionId,
         selectedChordId: chordId,
+        selectedNoteId: null,
+    };
+
+    emit();
+}
+
+export function selectNote(sectionId: string, chordId: string, noteId: string) {
+    state = {
+        ...state,
+        selectedSectionId: sectionId,
+        selectedChordId: chordId,
+        selectedNoteId: noteId,
     };
 
     emit();

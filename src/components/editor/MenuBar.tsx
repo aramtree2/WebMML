@@ -6,6 +6,8 @@ import type { DockingLayoutController } from "../../hooks/useDockingLayout";
 import { setWmlProject } from "../../core/wml/wmlStore";
 import { createEmptyProject } from "../../core/wml/wmlUtils";
 import { playbackEngine } from "../../core/playback";
+import { clearPaletteSelection } from "../../core/editor/paletteStore";
+import { clearArrangementSelection } from "../../core/editor/arrangementControlStore";
 
 type MenuBarProps = {
     docking: DockingLayoutController;
@@ -62,6 +64,8 @@ export function MenuBar({ docking, onOpenDialog }: MenuBarProps) {
 
     const createNewProject = () => {
         playbackEngine.stop();
+        clearArrangementSelection();
+        clearPaletteSelection();
         setWmlProject(createEmptyProject());
         closeMenu();
     };

@@ -11,8 +11,6 @@ export type EventEditorTarget =
           tick: number;
           eventId?: string;
           isNew?: boolean;
-          originalTick?: number;
-          originalBpm?: number;
       }
     | {
           type: "note";
