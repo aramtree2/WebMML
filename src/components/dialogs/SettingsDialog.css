@@ -1,0 +1,76 @@
+.settings-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.settings-dialog__row {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 4px;
+}
+
+.settings-dialog__label {
+    color: #1f2933;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.settings-dialog__switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 46px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.settings-dialog__switch input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.settings-dialog__switch-track {
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    background: #c9ced6;
+    border: 1px solid #aeb5bf;
+    transition:
+        background 120ms ease,
+        border-color 120ms ease;
+}
+
+.settings-dialog__switch-thumb {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform 120ms ease;
+}
+
+.settings-dialog__switch input:checked + .settings-dialog__switch-track {
+    background: #2563eb;
+    border-color: #1d4ed8;
+}
+
+.settings-dialog__switch input:checked
+    + .settings-dialog__switch-track
+    .settings-dialog__switch-thumb {
+    transform: translateX(20px);
+}
+
+.settings-dialog__switch input:focus-visible + .settings-dialog__switch-track {
+    outline: 2px solid #1d4ed8;
+    outline-offset: 2px;
+}
