@@ -427,6 +427,15 @@
     user-select: none;
 }
 
+.piano-roll-note-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -1px;
+    bottom: 0;
+    width: 6px;
+    cursor: ew-resize;
+}
+
 .piano-roll-note.section-selected {
     border-color: #1d4ed8;
     background: #2563eb;
@@ -446,6 +455,14 @@
     background: #f472b6;
     box-shadow: 0 0 0 2px rgba(244, 114, 182, 0.42);
     z-index: 4;
+}
+
+.piano-roll-note.resize-preview {
+    opacity: 0.72;
+}
+
+.piano-roll-note.resize-zero {
+    opacity: 0.38;
 }
 
 .piano-roll-note-preview {

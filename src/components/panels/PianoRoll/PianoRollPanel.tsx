@@ -118,9 +118,20 @@ type PianoRollVelocityGraphSegment = {
 type PianoRollNoteDraft = {
     midi: number;
     startTick: number;
+    startPointerTick: number;
     unitTick: number;
     sectionId: string;
     chordId: string;
+    pointerId: number;
+};
+
+type PianoRollNoteResizeDraft = {
+    sectionId: string;
+    chordId: string;
+    noteId: string;
+    startPointerTick: number;
+    originalDurationTick: number;
+    unitTick: number;
     pointerId: number;
 };
 
@@ -139,6 +150,7 @@ export function PianoRollPanel() {
     const focusedSelectionRef = useRef<string | null>(null);
     const pendingNoteCycleTimerRef = useRef<number | null>(null);
     const noteDraftRef = useRef<PianoRollNoteDraft | null>(null);
+    const noteResizeDraftRef = useRef<PianoRollNoteResizeDraft | null>(null);
 
     const [project, setProject] = useState(() => getWmlProject());
     const [arrangementControls, setArrangementControls] = useState(() =>
@@ -168,6 +180,10 @@ export function PianoRollPanel() {
     const [isSustainMarkerHovered, setIsSustainMarkerHovered] = useState(false);
     const [timelineBeatCount, setTimelineBeatCount] = useState(INITIAL_TIMELINE_BEAT_COUNT);
     const [notePreview, setNotePreview] = useState<PianoRollNotePreview | null>(null);
+    const [noteResizePreview, setNoteResizePreview] = useState<{
+        noteId: string;
+        durationTick: number;
+    } | null>(null);
 
     const rows = useMemo(() => createNoteRows(), []);
     const pianoRollData = useMemo(
@@ -744,6 +760,122 @@ export function PianoRollPanel() {
         setNotePreview(preview);
     };
 
+    const beginNoteResize = (
+        e: React.PointerEvent<HTMLDivElement>,
+        note: PianoRollNoteView,
+    ) => {
+        if (e.button !== 0) return;
+        if (!note.sectionId || !note.chordId) return;
+        if (selectedPaletteItem?.type !== "note-duration") return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        noteResizeDraftRef.current = {
+            sectionId: note.sectionId,
+            chordId: note.chordId,
+            noteId: note.id,
+            startPointerTick: getPointerTick(e),
+            originalDurationTick: note.durationTick,
+            unitTick: getPaletteNoteDurationTick(selectedPaletteItem.denominator, ticksPerBeat),
+            pointerId: e.pointerId,
+        };
+        setNoteResizePreview({
+            noteId: note.id,
+            durationTick: note.durationTick,
+        });
+        e.currentTarget.setPointerCapture(e.pointerId);
+    };
+
+    const updateNoteResize = (e: React.PointerEvent<HTMLDivElement>) => {
+        const draft = noteResizeDraftRef.current;
+        if (!draft || draft.pointerId !== e.pointerId) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const durationTick = getResizeDurationTick(
+            draft.originalDurationTick,
+            draft.startPointerTick,
+            getPointerTick(e),
+            draft.unitTick,
+        );
+
+        setNoteResizePreview({
+            noteId: draft.noteId,
+            durationTick,
+        });
+    };
+
+    const commitNoteResize = (e: React.PointerEvent<HTMLDivElement>) => {
+        const draft = noteResizeDraftRef.current;
+        if (!draft || draft.pointerId !== e.pointerId) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const durationTick = getResizeDurationTick(
+            draft.originalDurationTick,
+            draft.startPointerTick,
+            getPointerTick(e),
+            draft.unitTick,
+        );
+
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+        noteResizeDraftRef.current = null;
+        setNoteResizePreview(null);
+        updateNoteDuration(draft, durationTick);
+    };
+
+    const cancelNoteResize = (e: React.PointerEvent<HTMLDivElement>) => {
+        const draft = noteResizeDraftRef.current;
+        if (!draft || draft.pointerId !== e.pointerId) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+        noteResizeDraftRef.current = null;
+        setNoteResizePreview(null);
+    };
+
+    const updateNoteDuration = (
+        draft: Pick<PianoRollNoteResizeDraft, "sectionId" | "chordId" | "noteId">,
+        durationTick: number,
+    ) => {
+        updateWmlProject((prev) => ({
+            ...prev,
+            sections: prev.sections.map((section) =>
+                section.id === draft.sectionId
+                    ? {
+                          ...section,
+                          chords: section.chords.map((chord) =>
+                              chord.id === draft.chordId
+                                  ? {
+                                        ...chord,
+                                        notes:
+                                            durationTick <= 0
+                                                ? chord.notes.filter((note) => note.id !== draft.noteId)
+                                                : chord.notes.map((note) =>
+                                                      note.id === draft.noteId
+                                                          ? {
+                                                                ...note,
+                                                                duration: durationTick,
+                                                            }
+                                                          : note,
+                                                  ),
+                                    }
+                                  : chord,
+                          ),
+                      }
+                    : section,
+            ),
+        }));
+    };
+
     const getNotePreviewAtPointer = (
         e: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
     ): PianoRollNotePreview | null => {
@@ -771,6 +903,17 @@ export function PianoRollPanel() {
         };
     };
 
+    const getPointerTick = (
+        e: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
+    ) => {
+        const scrollArea = scrollAreaRef.current;
+        const rect = (scrollArea ?? e.currentTarget).getBoundingClientRect();
+        const scrollX = scrollArea?.scrollLeft ?? e.currentTarget.scrollLeft;
+        const x = e.clientX - rect.left + scrollX;
+
+        return xToTick(x, ticksPerBeat, beatWidth);
+    };
+
     const beginNoteDraft = (e: React.PointerEvent<HTMLDivElement>) => {
         if (e.button !== 0) return;
         e.preventDefault();
@@ -781,6 +924,7 @@ export function PianoRollPanel() {
         noteDraftRef.current = {
             midi: preview.midi,
             startTick: preview.tick,
+            startPointerTick: getPointerTick(e),
             unitTick: preview.durationTick,
             sectionId: selectedSectionId,
             chordId: selectedChordId,
@@ -795,10 +939,12 @@ export function PianoRollPanel() {
         if (!draft) return;
         e.preventDefault();
 
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = e.clientX - rect.left + e.currentTarget.scrollLeft;
-        const tick = snapTickToGrid(xToTick(x, ticksPerBeat, beatWidth), ticksPerBeat, gridSubdivision);
-        const durationTick = getDraftDurationTick(draft.startTick, tick, draft.unitTick);
+        const tick = getPointerTick(e);
+        const durationTick = getDraftDurationTick(
+            draft.startPointerTick,
+            tick,
+            draft.unitTick,
+        );
 
         setNotePreview({
             midi: draft.midi,
@@ -817,10 +963,12 @@ export function PianoRollPanel() {
             e.currentTarget.releasePointerCapture(e.pointerId);
         }
 
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = e.clientX - rect.left + e.currentTarget.scrollLeft;
-        const tick = snapTickToGrid(xToTick(x, ticksPerBeat, beatWidth), ticksPerBeat, gridSubdivision);
-        const durationTick = getDraftDurationTick(draft.startTick, tick, draft.unitTick);
+        const tick = getPointerTick(e);
+        const durationTick = getDraftDurationTick(
+            draft.startPointerTick,
+            tick,
+            draft.unitTick,
+        );
         noteDraftRef.current = null;
 
         if (durationTick <= 0) {
@@ -1372,11 +1520,26 @@ export function PianoRollPanel() {
                             const isSelectedSection =
                                 selectedSectionId != null && note.sectionId === selectedSectionId;
                             const isSelectedNote = selectedNoteId === note.id;
+                            const resizePreviewDurationTick =
+                                noteResizePreview?.noteId === note.id
+                                    ? noteResizePreview.durationTick
+                                    : null;
+                            const renderedDurationTick =
+                                resizePreviewDurationTick == null
+                                    ? note.durationTick
+                                    : Math.max(1, resizePreviewDurationTick);
                             const noteClassName = [
                                 "piano-roll-note",
                                 isSelectedSection ? "section-selected" : "",
                                 isSelectedChord ? "chord-selected" : "",
                                 isSelectedNote ? "note-selected" : "",
+                                resizePreviewDurationTick != null ? "resize-preview" : "",
+                                resizePreviewDurationTick != null && resizePreviewDurationTick <= 0
+                                    ? "resize-zero"
+                                    : "",
+                                isSelectedNote && selectedPaletteItem?.type === "note-duration"
+                                    ? "resizable"
+                                    : "",
                             ]
                                 .filter(Boolean)
                                 .join(" ");
@@ -1395,13 +1558,28 @@ export function PianoRollPanel() {
                                         left: tickToX(note.startTick, ticksPerBeat, beatWidth),
                                         top: y + 2,
                                         width: Math.max(
-                                            tickToWidth(note.durationTick, ticksPerBeat, beatWidth),
+                                            tickToWidth(
+                                                renderedDurationTick,
+                                                ticksPerBeat,
+                                                beatWidth,
+                                            ),
                                             4,
                                         ),
                                         height: Math.max(rowHeight - 4, 4),
                                     }}
                                     title={`${midiToName(note.midi)} / ${note.startTick}`}
-                                />
+                                >
+                                    {isSelectedNote &&
+                                        selectedPaletteItem?.type === "note-duration" && (
+                                            <div
+                                                className="piano-roll-note-resize-handle"
+                                                onPointerDown={(e) => beginNoteResize(e, note)}
+                                                onPointerMove={updateNoteResize}
+                                                onPointerUp={commitNoteResize}
+                                                onPointerCancel={cancelNoteResize}
+                                            />
+                                        )}
+                                </div>
                             );
                         })}
 
@@ -1906,6 +2084,18 @@ function getDraftDurationTick(startTick: number, currentTick: number, unitTick: 
     if (currentTick < startTick) return 0;
 
     return Math.max(unitTick, (Math.floor((currentTick - startTick) / unitTick) + 1) * unitTick);
+}
+
+function getResizeDurationTick(
+    originalDurationTick: number,
+    startPointerTick: number,
+    currentTick: number,
+    unitTick: number,
+) {
+    const deltaTick = currentTick - startPointerTick;
+    const deltaUnitCount = Math.floor(deltaTick / unitTick);
+
+    return originalDurationTick + deltaUnitCount * unitTick;
 }
 
 function findSelectedOrSelectableNoteAtPoint(
