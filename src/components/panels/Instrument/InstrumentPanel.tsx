@@ -12,6 +12,7 @@ import {
     renameSection,
 } from "../../../core/wml/wmlUtils";
 import {
+    clearArrangementSelection,
     getArrangementSelection,
     getChordControl,
     getSectionControl,
@@ -355,8 +356,24 @@ export function InstrumentPanel() {
         closeContextMenu();
     };
 
+    const clearSelectionFromEmptyClick = (e: MouseEvent<HTMLDivElement>) => {
+        if (
+            e.target instanceof Element &&
+            e.target.closest("[data-instrument-panel-item]")
+        ) {
+            return;
+        }
+
+        clearArrangementSelection();
+    };
+
     return (
-        <div className="panel-content" style={styles.root} onContextMenu={(e) => e.preventDefault()}>
+        <div
+            className="panel-content"
+            style={styles.root}
+            onClick={clearSelectionFromEmptyClick}
+            onContextMenu={(e) => e.preventDefault()}
+        >
             <div
                 style={styles.list}
                 onDragOver={allowDrop}
@@ -385,6 +402,7 @@ export function InstrumentPanel() {
                     return (
                         <section
                             key={section.id}
+                            data-instrument-panel-item
                             style={{
                                 ...styles.sectionCard,
                                 ...(sectionSelected ? styles.sectionCardSelected : null),
@@ -511,7 +529,12 @@ export function InstrumentPanel() {
                     );
                 })}
 
-                <button type="button" style={styles.addSectionButton} onClick={addSection}>
+                <button
+                    type="button"
+                    style={styles.addSectionButton}
+                    data-instrument-panel-item
+                    onClick={addSection}
+                >
                     + 섹션 추가
                 </button>
             </div>
@@ -803,6 +826,7 @@ function ContextMenu({
 }: ContextMenuProps) {
     return (
         <div
+            data-instrument-panel-item
             style={{
                 ...styles.contextMenu,
                 left: state.x,

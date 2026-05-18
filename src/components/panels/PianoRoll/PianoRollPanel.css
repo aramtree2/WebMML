@@ -175,6 +175,7 @@
     right: 0;
     bottom: 0;
     display: flex;
+    box-sizing: border-box;
     min-width: 0;
     min-height: 0;
 }
@@ -227,6 +228,66 @@
     user-select: none;
 }
 
+.piano-roll-event-lane-keys {
+    position: absolute;
+    left: 0;
+    bottom: 17px;
+    box-sizing: border-box;
+    overflow: hidden;
+    border-right: 1px solid #bdbdbd;
+    background: #d8d8d8;
+    z-index: 8;
+}
+
+.piano-roll-event-lane-corner {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 17px;
+    box-sizing: border-box;
+    border-right: 1px solid #bdbdbd;
+    background: #d8d8d8;
+    z-index: 8;
+}
+
+.piano-roll-event-lane-key {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    border-top: 1px solid #c8c8c8;
+    border-bottom: 1px solid #c8c8c8;
+    padding: 0 4px;
+    background: #d8d8d8;
+    color: #444444;
+    font-size: 11px;
+    line-height: 1;
+    user-select: none;
+}
+
+.piano-roll-event-lane-key span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.piano-roll-event-lanes {
+    position: absolute;
+    right: 17px;
+    bottom: 17px;
+    overflow: hidden;
+    background: #e4e4e4;
+    z-index: 8;
+}
+
+.piano-roll-event-lanes-content {
+    position: relative;
+    will-change: transform;
+}
+
 .piano-roll-scroll-area {
     flex: 1;
     min-width: 0;
@@ -256,6 +317,84 @@
 
 .piano-roll-row.black-row {
     background: #f3f3f3;
+}
+
+.piano-roll-event-lane-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    box-sizing: border-box;
+    border-top: 1px solid #c8c8c8;
+    border-bottom: 1px solid #c8c8c8;
+    background: #e4e4e4;
+}
+
+.piano-roll-event-lane-beat {
+    position: absolute;
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+.piano-roll-event-lane-beat.beat-line {
+    border-left: 1px solid #d4d4d4;
+}
+
+.piano-roll-event-lane-beat.measure-line {
+    border-left: 1px solid #aaaaaa;
+}
+
+.piano-roll-event-lane-subdivision {
+    position: absolute;
+    box-sizing: border-box;
+    border-left: 1px dashed rgba(160, 160, 160, 0.45);
+    pointer-events: none;
+}
+
+.piano-roll-velocity-graph {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.piano-roll-velocity-graph polyline {
+    fill: none;
+    stroke: #2563eb;
+    stroke-width: 2;
+    stroke-linejoin: miter;
+    stroke-linecap: square;
+}
+
+.piano-roll-velocity-graph polyline.sustained {
+    stroke: #16a34a;
+}
+
+.piano-roll-sustain-marker {
+    position: absolute;
+    width: 7px;
+    box-sizing: border-box;
+    border: 1px solid #166534;
+    background: #22c55e;
+    cursor: pointer;
+    z-index: 5;
+}
+
+.piano-roll-sustain-marker.preview {
+    border-style: dashed;
+    opacity: 0.5;
+    pointer-events: none;
+    z-index: 4;
+}
+
+.piano-roll-sustain-marker.off {
+    border-color: #64748b;
+    background: #94a3b8;
+}
+
+.piano-roll-sustain-marker:hover {
+    filter: brightness(1.12);
 }
 
 .piano-roll-grid-line {

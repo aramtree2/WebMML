@@ -1,3 +1,4 @@
+import { reconcileArrangementSelection } from "../editor/arrangementControlStore";
 import type { WmlProject } from "./wmlTypes";
 import { createEmptyProject, normalizeWmlProject } from "./wmlUtils";
 
@@ -10,6 +11,7 @@ export function getWmlProject() {
 
 export function setWmlProject(project: WmlProject, options?: { save?: boolean }) {
     currentProject = normalizeWmlProject(project);
+    reconcileArrangementSelection(currentProject);
 
     if (options?.save !== false) {
         saveWmlProject();

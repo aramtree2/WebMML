@@ -54,6 +54,8 @@ export class PlaybackEngine {
     private players = new Map<string, InstrumentPlayer>();
     private loadingPlayers = new Map<string, Promise<InstrumentPlayer>>();
     private activeVoices = new Map<string, string>();
+    private sustainedSections = new Set<string>();
+    private sustainedVoices = new Map<string, string>();
     private stoppedVoiceKeys = new Set<string>();
     private mutedSections = new Set<string>();
     private sectionVolumes = new Map<string, number>();
@@ -160,6 +162,7 @@ export class PlaybackEngine {
         }
 
         this.clearStoppedVoiceKeys();
+        this.syncSustainStateAtTime(this.currentTime);
         this.state = "playing";
         this.startOffset = this.currentTime;
         this.startedAtAudioTime = ctx.currentTime +
@@ -206,6 +209,7 @@ export class PlaybackEngine {
         this.nextEventIndex = findEventIndex(this.timeline.events, nextTime);
         this.clearPendingTimers();
         this.stopAllVoices();
+        this.syncSustainStateAtTime(nextTime);
 
         if (wasPlaying) {
             this.startScheduler();
@@ -362,6 +366,7 @@ export class PlaybackEngine {
 
         if (event.type === "sustain") {
             if (this.mutedSections.has(event.sectionId)) return;
+            this.setSustain(event.sectionId, event.value > 0, scheduledAudioTime);
             return;
         }
 
@@ -376,6 +381,7 @@ export class PlaybackEngine {
             if (this.state !== "playing" || this.stoppedVoiceKeys.delete(key)) return;
 
             this.stopActiveVoice(key, scheduledAudioTime);
+            this.stopSustainedVoice(key, scheduledAudioTime);
 
             const sectionVolume = this.sectionVolumes.get(event.sectionId) ?? 1;
             const velocity = clamp(event.velocity * this.masterVolume * sectionVolume, 0, 1);
@@ -384,9 +390,38 @@ export class PlaybackEngine {
             return;
         }
 
+        if (this.sustainedSections.has(event.sectionId)) {
+            if (this.sustainActiveVoice(key)) return;
+        }
+
         if (!this.stopActiveVoice(key, scheduledAudioTime)) {
             this.stoppedVoiceKeys.add(key);
         }
+    }
+
+    private setSustain(sectionId: string, enabled: boolean, audioTime = this.getAudioContext().currentTime): void {
+        if (enabled) {
+            this.sustainedSections.add(sectionId);
+            return;
+        }
+
+        this.sustainedSections.delete(sectionId);
+
+        for (const key of [...this.sustainedVoices.keys()]) {
+            if (getSectionIdFromVoiceKey(key) === sectionId) {
+                this.stopSustainedVoice(key, audioTime);
+            }
+        }
+    }
+
+    private sustainActiveVoice(key: string): boolean {
+        const packedVoice = this.activeVoices.get(key);
+        if (!packedVoice) return false;
+
+        this.activeVoices.delete(key);
+        this.sustainedVoices.set(key, packedVoice);
+        this.stoppedVoiceKeys.delete(key);
+        return true;
     }
 
     private stopActiveVoice(key: string, audioTime = this.getAudioContext().currentTime): boolean {
@@ -402,6 +437,23 @@ export class PlaybackEngine {
 
         player?.stopNote(voiceId, audioTime);
         this.activeVoices.delete(key);
+        this.stoppedVoiceKeys.delete(key);
+        return true;
+    }
+
+    private stopSustainedVoice(key: string, audioTime = this.getAudioContext().currentTime): boolean {
+        const packedVoice = this.sustainedVoices.get(key);
+        if (!packedVoice) {
+            return false;
+        }
+
+        const separatorIndex = packedVoice.indexOf(":");
+        const instrumentId = packedVoice.slice(0, separatorIndex);
+        const voiceId = packedVoice.slice(separatorIndex + 1);
+        const player = this.players.get(instrumentId);
+
+        player?.stopNote(voiceId, audioTime);
+        this.sustainedVoices.delete(key);
         this.stoppedVoiceKeys.delete(key);
         return true;
     }
@@ -447,7 +499,25 @@ export class PlaybackEngine {
         }
 
         this.activeVoices.clear();
+        this.sustainedVoices.clear();
+        this.sustainedSections.clear();
         this.clearStoppedVoiceKeys();
+    }
+
+    private syncSustainStateAtTime(time: number): void {
+        this.sustainedSections.clear();
+
+        for (const event of this.timeline.events) {
+            if (event.time > time) break;
+
+            if (event.type === "sustain") {
+                if (event.value > 0) {
+                    this.sustainedSections.add(event.sectionId);
+                } else {
+                    this.sustainedSections.delete(event.sectionId);
+                }
+            }
+        }
     }
 
     private clearStoppedVoiceKeys(): void {
@@ -522,6 +592,10 @@ function findEventIndex(events: PlaybackEvent[], time: number): number {
 
 function getVoiceKey(sectionId: string, noteId: string): string {
     return `${sectionId}:${noteId}`;
+}
+
+function getSectionIdFromVoiceKey(key: string): string {
+    return key.slice(0, key.indexOf(":"));
 }
 
 function getArrangementPlaybackKey(controls: ReturnType<typeof getArrangementControlState>): string {

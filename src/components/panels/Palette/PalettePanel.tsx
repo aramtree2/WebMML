@@ -87,6 +87,8 @@ const SUSTAIN_TOOLS: CommandToolItem[] = [
     { key: "sustain-off", label: "서스테인 OFF", icon: { row: 4, col: 3 }, item: { type: "sustain", value: false } },
 ];
 
+const SHOW_PENDING_PALETTE_TOOLS = false;
+
 export function PalettePanel() {
     const [paletteState, setPaletteState] = useState(() => getPaletteState());
     const [arrangementState, setArrangementState] = useState(() =>
@@ -157,37 +159,41 @@ export function PalettePanel() {
                 getIcon={(item) => item.noteIcon}
             />
 
-            <div className="palette-divider" />
+            {SHOW_PENDING_PALETTE_TOOLS && (
+                <>
+                    <div className="palette-divider" />
 
-            <PaletteDurationSection
-                title="쉼표"
-                ariaLabel="쉼표"
-                itemType="rest-duration"
-                canUseTools={canUseDurationTools}
-                selectedItem={paletteState.selectedItem}
-                getLabel={(item) => item.restLabel}
-                getIcon={(item) => item.restIcon}
-            />
+                    <PaletteDurationSection
+                        title="쉼표"
+                        ariaLabel="쉼표"
+                        itemType="rest-duration"
+                        canUseTools={canUseDurationTools}
+                        selectedItem={paletteState.selectedItem}
+                        getLabel={(item) => item.restLabel}
+                        getIcon={(item) => item.restIcon}
+                    />
 
-            <div className="palette-divider" />
+                    <div className="palette-divider" />
 
-            <PaletteCommandSection
-                title="노트 수정"
-                ariaLabel="노트 수정"
-                groups={NOTE_EDIT_TOOL_GROUPS}
-                canUseTools={canUseNoteEditTools}
-                selectedItem={paletteState.selectedItem}
-            />
+                    <PaletteCommandSection
+                        title="노트 수정"
+                        ariaLabel="노트 수정"
+                        groups={NOTE_EDIT_TOOL_GROUPS}
+                        canUseTools={canUseNoteEditTools}
+                        selectedItem={paletteState.selectedItem}
+                    />
 
-            <div className="palette-divider" />
+                    <div className="palette-divider" />
 
-            <PaletteCommandSection
-                title="서스테인"
-                ariaLabel="서스테인"
-                groups={[{ key: "sustain", items: SUSTAIN_TOOLS }]}
-                canUseTools={canUseSustainTools}
-                selectedItem={paletteState.selectedItem}
-            />
+                    <PaletteCommandSection
+                        title="서스테인"
+                        ariaLabel="서스테인"
+                        groups={[{ key: "sustain", items: SUSTAIN_TOOLS }]}
+                        canUseTools={canUseSustainTools}
+                        selectedItem={paletteState.selectedItem}
+                    />
+                </>
+            )}
         </div>
     );
 }

@@ -1,3 +1,5 @@
+import type { WmlProject } from "../wml/wmlTypes";
+
 export type ArrangementItemControl = {
     visible: boolean;
     solo: boolean;
@@ -99,6 +101,25 @@ export function clearArrangementSelection() {
     emit();
 }
 
+export function reconcileArrangementSelection(project: WmlProject) {
+    const selection = getValidSelectionForProject(project);
+
+    if (
+        selection.selectedSectionId === state.selectedSectionId &&
+        selection.selectedChordId === state.selectedChordId &&
+        selection.selectedNoteId === state.selectedNoteId
+    ) {
+        return;
+    }
+
+    state = {
+        ...state,
+        ...selection,
+    };
+
+    emit();
+}
+
 export function selectSection(sectionId: string) {
     state = {
         ...state,
@@ -130,6 +151,71 @@ export function selectNote(sectionId: string, chordId: string, noteId: string) {
     };
 
     emit();
+}
+
+export function clearSelectedNote() {
+    if (state.selectedNoteId == null) return;
+
+    state = {
+        ...state,
+        selectedNoteId: null,
+    };
+
+    emit();
+}
+
+function getValidSelectionForProject(project: WmlProject) {
+    const sectionId = state.selectedSectionId;
+    const chordId = state.selectedChordId;
+    const noteId = state.selectedNoteId;
+
+    if (sectionId == null) {
+        return {
+            selectedSectionId: null,
+            selectedChordId: null,
+            selectedNoteId: null,
+        };
+    }
+
+    const section = project.sections.find((item) => item.id === sectionId);
+    if (!section) {
+        return {
+            selectedSectionId: null,
+            selectedChordId: null,
+            selectedNoteId: null,
+        };
+    }
+
+    if (chordId == null) {
+        return {
+            selectedSectionId: sectionId,
+            selectedChordId: null,
+            selectedNoteId: null,
+        };
+    }
+
+    const chord = section.chords.find((item) => item.id === chordId);
+    if (!chord) {
+        return {
+            selectedSectionId: sectionId,
+            selectedChordId: null,
+            selectedNoteId: null,
+        };
+    }
+
+    if (noteId == null || chord.notes.some((item) => item.id === noteId)) {
+        return {
+            selectedSectionId: sectionId,
+            selectedChordId: chordId,
+            selectedNoteId: noteId,
+        };
+    }
+
+    return {
+        selectedSectionId: sectionId,
+        selectedChordId: chordId,
+        selectedNoteId: null,
+    };
 }
 
 function updateSectionControl(

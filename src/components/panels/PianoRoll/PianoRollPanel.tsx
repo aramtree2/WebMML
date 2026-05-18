@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+    clearSelectedNote,
     getArrangementControlState,
     selectNote,
     subscribeArrangementControlState,
@@ -14,6 +15,7 @@ import { playbackEngine, secondsToTick, tickToSeconds } from "../../../core/play
 import { getWmlProject, subscribeWmlProject, updateWmlProject } from "../../../core/wml/wmlStore";
 import { createId } from "../../../core/wml/wmlUtils";
 import type { NoteEvent } from "../../../core/wml/wmlTypes";
+import type { SustainEvent } from "../../../core/wml/wmlTypes";
 import type { TimeSignatureEvent } from "../../../core/wml/wmlTypes";
 import type { TempoEvent } from "../../../core/wml/wmlTypes";
 import { wmlProjectToPianoRollData } from "./pianoRollMapper";
@@ -29,6 +31,7 @@ const BASE_BEAT_WIDTH = 30;
 const KEYBOARD_WIDTH = 72;
 const HEADER_HEIGHT = 34;
 const HEADER_LANE_HEIGHT = HEADER_HEIGHT / 2;
+const EVENT_LANE_HEIGHT = HEADER_HEIGHT;
 const TEMPO_MARKER_WIDTH = 7;
 const DEFAULT_TIME_SIGNATURE = {
     bar: 0,
@@ -46,6 +49,13 @@ const NOTE_CYCLE_CLICK_DELAY_MS = 180;
 const AUTO_SCROLL_RIGHT_RATIO = 0.75;
 const AUTO_SCROLL_LEFT_RATIO = 0.15;
 const GRID_SUBDIVISION_OPTIONS = [0, 1, 2, 4, 8, 16, 32] as const;
+const EVENT_LANES = [
+    {
+        key: "automation",
+        label: "볼륨 그래프",
+        title: "초록색 : 서스테인 on, 파란색 : 서스테인 off",
+    },
+] as const;
 
 type PianoRollRow = {
     midi: number;
@@ -94,6 +104,17 @@ type PianoRollVelocityLabelView = {
     velocity: number;
 };
 
+type PianoRollVelocityGraphPoint = {
+    tick: number;
+    velocity: number;
+};
+
+type PianoRollVelocityGraphSegment = {
+    key: string;
+    points: string;
+    sustained: boolean;
+};
+
 type PianoRollNoteDraft = {
     midi: number;
     startTick: number;
@@ -140,6 +161,11 @@ export function PianoRollPanel() {
     );
     const [tempoPreviewTick, setTempoPreviewTick] = useState<number | null>(null);
     const [isTempoMarkerHovered, setIsTempoMarkerHovered] = useState(false);
+    const [sustainPreview, setSustainPreview] = useState<{
+        tick: number;
+        value: number;
+    } | null>(null);
+    const [isSustainMarkerHovered, setIsSustainMarkerHovered] = useState(false);
     const [timelineBeatCount, setTimelineBeatCount] = useState(INITIAL_TIMELINE_BEAT_COUNT);
     const [notePreview, setNotePreview] = useState<PianoRollNotePreview | null>(null);
 
@@ -184,14 +210,49 @@ export function PianoRollPanel() {
         () => createSubdivisionViews(beatViews, gridSubdivision),
         [beatViews, gridSubdivision],
     );
+    const eventLaneHeight = EVENT_LANES.length * EVENT_LANE_HEIGHT;
     const velocityLabelViews = useMemo(
         () => createVelocityLabelViews(pianoRollData.notes, selectedChordId),
         [pianoRollData.notes, selectedChordId],
     );
+    const velocityGraphSegments = useMemo(
+        () =>
+            createVelocityGraphSegments(
+                pianoRollData.notes,
+                selectedChordId,
+                selectedSectionId,
+                project.sections,
+                contentBeatCount,
+                ticksPerBeat,
+                beatWidth,
+                eventLaneHeight,
+            ),
+        [
+            beatWidth,
+            contentBeatCount,
+            eventLaneHeight,
+            pianoRollData.notes,
+            project.sections,
+            selectedChordId,
+            selectedSectionId,
+            ticksPerBeat,
+        ],
+    );
+    const selectedSectionSustainEvents = useMemo(
+        () =>
+            selectedSectionId == null
+                ? []
+                : [
+                      ...(project.sections.find((section) => section.id === selectedSectionId)
+                          ?.sustain ?? []),
+                  ].sort((a, b) => a.tick - b.tick),
+        [project.sections, selectedSectionId],
+    );
 
     const contentWidth = contentBeatCount * beatWidth;
-    const contentHeight = rows.length * rowHeight;
-    const whiteKeys = createWhiteKeys(rows, contentHeight);
+    const noteGridHeight = rows.length * rowHeight;
+    const contentHeight = noteGridHeight;
+    const whiteKeys = createWhiteKeys(rows, noteGridHeight);
 
     const syncScrollState = () => {
         const scrollArea = scrollAreaRef.current;
@@ -817,6 +878,13 @@ export function PianoRollPanel() {
         setNotePreview(null);
     };
 
+    const clearNoteSelectionOnEmptyClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (e.target instanceof Element && e.target.closest(".piano-roll-note")) return;
+        if (selectedPaletteItem != null) return;
+
+        clearSelectedNote();
+    };
+
     const openTimeSignatureEditor = (
         e: React.MouseEvent<HTMLDivElement>,
         measure: PianoRollMeasureView,
@@ -951,6 +1019,85 @@ export function PianoRollPanel() {
                   }
                 : null,
         );
+    };
+
+    const createSustainAtPointer = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (selectedSectionId == null) return;
+
+        const tick = getSustainTickAtPointer(e);
+        const previousValue = getSustainValueBeforeTick(selectedSectionSustainEvents, tick);
+        const nextValue = previousValue > 0 ? 0 : 1;
+        const id = createId("sustain");
+
+        updateWmlProject((prev) => ({
+            ...prev,
+            sections: prev.sections.map((section) =>
+                section.id === selectedSectionId
+                    ? {
+                          ...section,
+                          sustain: [
+                              ...section.sustain.filter((event) => event.tick !== tick),
+                              {
+                                  id,
+                                  tick,
+                                  value: nextValue,
+                              },
+                          ].sort((a, b) => a.tick - b.tick),
+                      }
+                    : section,
+            ),
+        }));
+    };
+
+    const updateSustainPreview = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (selectedSectionId == null || isSustainMarkerHovered) {
+            setSustainPreview(null);
+            return;
+        }
+
+        const tick = getSustainTickAtPointer(e);
+        const previousValue = getSustainValueBeforeTick(selectedSectionSustainEvents, tick);
+
+        setSustainPreview({
+            tick,
+            value: previousValue > 0 ? 0 : 1,
+        });
+    };
+
+    const getSustainTickAtPointer = (
+        e: React.MouseEvent<HTMLDivElement> | React.PointerEvent<HTMLDivElement>,
+    ) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left + scrollLeft;
+
+        return snapTickToGrid(
+            xToTick(x, ticksPerBeat, beatWidth),
+            ticksPerBeat,
+            gridSubdivision,
+        );
+    };
+
+    const deleteSustainEvent = (
+        e: React.MouseEvent<HTMLDivElement>,
+        eventId: string,
+    ) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (selectedSectionId == null) return;
+
+        updateWmlProject((prev) => ({
+            ...prev,
+            sections: prev.sections.map((section) =>
+                section.id === selectedSectionId
+                    ? {
+                          ...section,
+                          sustain: section.sustain.filter((event) => event.id !== eventId),
+                      }
+                    : section,
+            ),
+        }));
     };
 
     return (
@@ -1175,6 +1322,7 @@ export function PianoRollPanel() {
                         onPointerDown={beginNoteDraft}
                         onPointerUp={commitNoteDraft}
                         onPointerCancel={cancelNoteDraft}
+                        onClick={clearNoteSelectionOnEmptyClick}
                         style={{
                             width: contentWidth,
                             height: contentHeight,
@@ -1308,6 +1456,154 @@ export function PianoRollPanel() {
                             className="piano-roll-playhead"
                             style={{ left: playheadLeft }}
                         />
+                    </div>
+                </div>
+
+                <div
+                    className="piano-roll-event-lane-keys"
+                    style={{
+                        width: KEYBOARD_WIDTH,
+                        height: eventLaneHeight,
+                    }}
+                >
+                    {EVENT_LANES.map((lane, index) => (
+                        <div
+                            key={lane.key}
+                            className="piano-roll-event-lane-key"
+                            style={{
+                                top: index * EVENT_LANE_HEIGHT,
+                                height: EVENT_LANE_HEIGHT,
+                            }}
+                        >
+                            <span title={lane.title}>{lane.label}</span>
+                        </div>
+                    ))}
+                </div>
+                <div
+                    className="piano-roll-event-lane-corner"
+                    style={{ width: KEYBOARD_WIDTH }}
+                />
+                <div
+                    className="piano-roll-event-lanes"
+                    onDoubleClick={createSustainAtPointer}
+                    onPointerMove={updateSustainPreview}
+                    onPointerLeave={() => {
+                        setSustainPreview(null);
+                        setIsSustainMarkerHovered(false);
+                    }}
+                    style={{
+                        left: KEYBOARD_WIDTH,
+                        height: eventLaneHeight,
+                    }}
+                >
+                    <div
+                        className="piano-roll-event-lanes-content"
+                        style={{
+                            width: contentWidth,
+                            height: eventLaneHeight,
+                            transform: `translateX(${-scrollLeft}px)`,
+                        }}
+                    >
+                        {EVENT_LANES.map((lane, laneIndex) => (
+                            <div
+                                key={lane.key}
+                                className="piano-roll-event-lane-row"
+                                style={{
+                                    top: laneIndex * EVENT_LANE_HEIGHT,
+                                    height: EVENT_LANE_HEIGHT,
+                                }}
+                            />
+                        ))}
+
+                        {EVENT_LANES.flatMap((lane, laneIndex) =>
+                            beatViews.map((beat) => (
+                                <div
+                                    key={`${lane.key}-${beat.key}`}
+                                    className={
+                                        beat.isMeasureStart
+                                            ? "piano-roll-event-lane-beat measure-line"
+                                            : "piano-roll-event-lane-beat beat-line"
+                                    }
+                                    style={{
+                                        left: beat.startBeat * beatWidth,
+                                        width: beat.beatLength * beatWidth,
+                                        top: laneIndex * EVENT_LANE_HEIGHT,
+                                        height: EVENT_LANE_HEIGHT,
+                                    }}
+                                />
+                            )),
+                        )}
+
+                        {EVENT_LANES.flatMap((lane, laneIndex) =>
+                            subdivisionViews.map((subdivision) => (
+                                <div
+                                    key={`${lane.key}-${subdivision.key}`}
+                                    className="piano-roll-event-lane-subdivision"
+                                    style={{
+                                        left: subdivision.startBeat * beatWidth,
+                                        top: laneIndex * EVENT_LANE_HEIGHT,
+                                        height: EVENT_LANE_HEIGHT,
+                                    }}
+                                />
+                            )),
+                        )}
+
+                        {velocityGraphSegments.length > 0 && (
+                            <svg
+                                className="piano-roll-velocity-graph"
+                                width={contentWidth}
+                                height={eventLaneHeight}
+                                viewBox={`0 0 ${contentWidth} ${eventLaneHeight}`}
+                                preserveAspectRatio="none"
+                            >
+                                {velocityGraphSegments.map((segment) => (
+                                    <polyline
+                                        key={segment.key}
+                                        className={segment.sustained ? "sustained" : undefined}
+                                        points={segment.points}
+                                    />
+                                ))}
+                            </svg>
+                        )}
+
+                        {sustainPreview != null && !isSustainMarkerHovered && (
+                            <div
+                                className={
+                                    sustainPreview.value > 0
+                                        ? "piano-roll-sustain-marker preview on"
+                                        : "piano-roll-sustain-marker preview off"
+                                }
+                                style={{
+                                    left:
+                                        tickToX(sustainPreview.tick, ticksPerBeat, beatWidth) -
+                                        TEMPO_MARKER_WIDTH / 2,
+                                    top: 3,
+                                    height: Math.max(4, eventLaneHeight - 6),
+                                }}
+                            />
+                        )}
+
+                        {selectedSectionSustainEvents.map((event) => (
+                            <div
+                                key={event.id}
+                                className={
+                                    event.value > 0
+                                        ? "piano-roll-sustain-marker on"
+                                        : "piano-roll-sustain-marker off"
+                                }
+                                onDoubleClick={(e) => deleteSustainEvent(e, event.id)}
+                                onPointerEnter={() => setIsSustainMarkerHovered(true)}
+                                onPointerLeave={() => setIsSustainMarkerHovered(false)}
+                                title={event.value > 0 ? "서스테인 ON" : "서스테인 OFF"}
+                                style={{
+                                    left:
+                                        tickToX(event.tick, ticksPerBeat, beatWidth) -
+                                        TEMPO_MARKER_WIDTH / 2,
+                                    top: 3,
+                                    height: Math.max(4, eventLaneHeight - 6),
+                                }}
+                            />
+                        ))}
                     </div>
                 </div>
             </div>
@@ -1467,6 +1763,128 @@ function createVelocityLabelViews(
     }
 
     return result;
+}
+
+function createVelocityGraphSegments(
+    notes: PianoRollNoteView[],
+    selectedChordId: string | null,
+    selectedSectionId: string | null,
+    sections: Array<{ id: string; sustain: SustainEvent[] }>,
+    contentBeatCount: number,
+    ticksPerBeat: number,
+    beatWidth: number,
+    laneHeight: number,
+): PianoRollVelocityGraphSegment[] {
+    if (selectedChordId == null) return [];
+
+    const selectedNotes = notes.filter((note) => note.chordId === selectedChordId);
+    if (selectedNotes.length === 0) return [];
+
+    const velocityChanges: PianoRollVelocityGraphPoint[] = [];
+    let previousVelocity: number | null = null;
+
+    for (const note of selectedNotes) {
+        const velocity = normalizeVelocityForLabel(note.velocity);
+        if (previousVelocity !== velocity) {
+            velocityChanges.push({
+                tick: note.startTick,
+                velocity,
+            });
+        }
+
+        previousVelocity = velocity;
+    }
+
+    const startTick = velocityChanges[0]?.tick ?? 0;
+    const endTick = Math.max(contentBeatCount * ticksPerBeat, selectedNotes.at(-1)?.startTick ?? 0);
+    const sustainEvents = selectedSectionId == null
+        ? []
+        : sections.find((section) => section.id === selectedSectionId)?.sustain ?? [];
+    const breakTicks = new Set<number>([startTick, endTick]);
+
+    for (const change of velocityChanges) {
+        if (change.tick >= startTick && change.tick <= endTick) {
+            breakTicks.add(change.tick);
+        }
+    }
+
+    for (const sustain of sustainEvents) {
+        if (sustain.tick >= startTick && sustain.tick <= endTick) {
+            breakTicks.add(sustain.tick);
+        }
+    }
+
+    const ticks = [...breakTicks].sort((a, b) => a - b);
+    const segments: PianoRollVelocityGraphSegment[] = [];
+
+    for (let index = 0; index < ticks.length - 1; index += 1) {
+        const tick = ticks[index];
+        const nextTick = ticks[index + 1];
+        const velocity = getVelocityAtTick(velocityChanges, tick);
+        const nextVelocity = getVelocityAtTick(velocityChanges, nextTick);
+        const sustained = isSustainOnAtTick(sustainEvents, tick);
+        const x = tickToX(tick, ticksPerBeat, beatWidth);
+        const nextX = tickToX(nextTick, ticksPerBeat, beatWidth);
+        const y = velocityToGraphY(velocity, laneHeight);
+        const nextY = velocityToGraphY(nextVelocity, laneHeight);
+
+        segments.push({
+            key: `h-${tick}-${nextTick}`,
+            points: `${x},${y} ${nextX},${y}`,
+            sustained,
+        });
+
+        if (nextVelocity !== velocity) {
+            segments.push({
+                key: `v-${nextTick}`,
+                points: `${nextX},${y} ${nextX},${nextY}`,
+                sustained: isSustainOnAtTick(sustainEvents, nextTick),
+            });
+        }
+    }
+
+    return segments;
+}
+
+function getVelocityAtTick(points: PianoRollVelocityGraphPoint[], tick: number) {
+    let velocity = points[0]?.velocity ?? 8;
+
+    for (const point of points) {
+        if (point.tick > tick) break;
+        velocity = point.velocity;
+    }
+
+    return velocity;
+}
+
+function isSustainOnAtTick(events: SustainEvent[], tick: number) {
+    let value = 0;
+
+    for (const event of [...events].sort((a, b) => a.tick - b.tick)) {
+        if (event.tick > tick) break;
+        value = event.value;
+    }
+
+    return value > 0;
+}
+
+function getSustainValueBeforeTick(events: SustainEvent[], tick: number) {
+    let value = 0;
+
+    for (const event of [...events].sort((a, b) => a.tick - b.tick)) {
+        if (event.tick >= tick) break;
+        value = event.value;
+    }
+
+    return value;
+}
+
+function velocityToGraphY(velocity: number, laneHeight: number) {
+    const topPadding = 3;
+    const bottomPadding = 3;
+    const graphHeight = Math.max(1, laneHeight - topPadding - bottomPadding);
+
+    return topPadding + (15 - velocity) / 15 * graphHeight;
 }
 
 function normalizeVelocityForLabel(value: number | undefined) {
