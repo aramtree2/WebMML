@@ -2,12 +2,14 @@ import type {
     WmlProject,
     WmlSection,
     Chord,
+    NoteEvent,
     TempoEvent,
     SustainEvent,
 } from "../wml/wmlTypes";
 
 import { createId } from "../wml/wmlUtils";
 import { DEFAULT_INSTRUMENT_ID } from "../virtualInstrument/instrumentRegistry";
+
 const TPQN = 480;
 
 export class MMLParseError extends Error {
@@ -71,6 +73,11 @@ type MmlToWmlOptions = {
     instrumentOverrides?: Array<string | number> | null;
     numerator?: number;
     denominator?: number;
+};
+
+type Voice = {
+    notes: NoteEvent[];
+    lastEndTick: number;
 };
 
 const clamp = (v: number, min: number, max: number) =>
@@ -338,7 +345,10 @@ function parseSingleMMLPart(mml: string): ParsedMMLPart {
         const endTime = time + durationFloat;
 
         const tick = Math.round(startTime);
-        const duration = Math.max(1, Math.round(endTime) - Math.round(startTime));
+        const duration = Math.max(
+            1,
+            Math.round(endTime) - Math.round(startTime)
+        );
 
         if (head === "R") {
             time = endTime;
@@ -350,8 +360,8 @@ function parseSingleMMLPart(mml: string): ParsedMMLPart {
         let pitch = isAbsoluteNote
             ? clampCommandValue("N", Number(token.slice(1)))
             : getNoteNumber(head, octave) +
-            (token.includes("+") || token.includes("#") ? 1 : 0) -
-            (token.includes("-") ? 1 : 0);
+              (token.includes("+") || token.includes("#") ? 1 : 0) -
+              (token.includes("-") ? 1 : 0);
 
         pitch = clamp(pitch, 0, 127);
 
@@ -404,32 +414,52 @@ function toSustainEvent(e: ParsedSustain): SustainEvent {
     };
 }
 
-function partToChord(part: string): {
-    chord: Chord;
-    tempoEvents: TempoEvent[];
-    sustainEvents: SustainEvent[];
-} {
-    const parsed = parseSingleMMLPart(part);
-
+function parsedNoteToNoteEvent(note: ParsedNote): NoteEvent {
     return {
-        chord: {
-            id: createId("chord"),
-            notes: parsed.notes
-                .map((note) => ({
-                    id: createId("note"),
-                    pitch: note.pitch,
-                    tick: note.tick,
-                    duration: note.duration,
-                    velocity: note.velocity,
-                }))
-                .sort((a, b) => {
-                    if (a.tick !== b.tick) return a.tick - b.tick;
-                    return a.pitch - b.pitch;
-                }),
-        },
-        tempoEvents: parsed.tempoEvents.map(toTempoEvent),
-        sustainEvents: parsed.sustainEvents.map(toSustainEvent),
+        id: createId("note"),
+        pitch: note.pitch,
+        tick: note.tick,
+        duration: note.duration,
+        velocity: note.velocity,
     };
+}
+
+function splitNotesToNonOverlappingChords(notes: NoteEvent[]): Chord[] {
+    const sortedNotes = [...notes].sort((a, b) => {
+        if (a.tick !== b.tick) return a.tick - b.tick;
+        return a.pitch - b.pitch;
+    });
+
+    const voices: Voice[] = [];
+
+    for (const note of sortedNotes) {
+        const startTick = note.tick;
+        const endTick = note.tick + note.duration;
+
+        let targetVoice = voices.find(
+            (voice) => voice.lastEndTick <= startTick
+        );
+
+        if (!targetVoice) {
+            targetVoice = {
+                notes: [],
+                lastEndTick: 0,
+            };
+
+            voices.push(targetVoice);
+        }
+
+        targetVoice.notes.push(note);
+        targetVoice.lastEndTick = Math.max(targetVoice.lastEndTick, endTick);
+    }
+
+    return voices.map((voice) => ({
+        id: createId("chord"),
+        notes: voice.notes.sort((a, b) => {
+            if (a.tick !== b.tick) return a.tick - b.tick;
+            return a.pitch - b.pitch;
+        }),
+    }));
 }
 
 function mmlPartsToChords(mmlParts: string[]): {
@@ -437,19 +467,23 @@ function mmlPartsToChords(mmlParts: string[]): {
     tempoEvents: TempoEvent[];
     sustainEvents: SustainEvent[];
 } {
-    const chords: Chord[] = [];
+    const notes: NoteEvent[] = [];
     const tempoEvents: TempoEvent[] = [];
     const sustainEvents: SustainEvent[] = [];
 
     for (const part of mmlParts) {
-        const parsed = partToChord(part);
+        const parsed = parseSingleMMLPart(part);
 
-        chords.push(parsed.chord);
-        tempoEvents.push(...parsed.tempoEvents);
-        sustainEvents.push(...parsed.sustainEvents);
+        notes.push(...parsed.notes.map(parsedNoteToNoteEvent));
+        tempoEvents.push(...parsed.tempoEvents.map(toTempoEvent));
+        sustainEvents.push(...parsed.sustainEvents.map(toSustainEvent));
     }
 
-    return { chords, tempoEvents, sustainEvents };
+    return {
+        chords: splitNotesToNonOverlappingChords(notes),
+        tempoEvents,
+        sustainEvents,
+    };
 }
 
 function dedupeTempos(tempos: TempoEvent[]): TempoEvent[] {
@@ -526,7 +560,7 @@ function convertMS2ContentToWML(
 
     const instrument =
         Array.isArray(options.instrumentOverrides) &&
-            options.instrumentOverrides[0] != null
+        options.instrumentOverrides[0] != null
             ? String(options.instrumentOverrides[0])
             : DEFAULT_INSTRUMENT_ID;
 
@@ -589,7 +623,7 @@ export function mmlToWml(
     tracks.forEach((track, i) => {
         const instrument =
             Array.isArray(options.instrumentOverrides) &&
-                options.instrumentOverrides[i] != null
+            options.instrumentOverrides[i] != null
                 ? String(options.instrumentOverrides[i])
                 : track.instrument ?? DEFAULT_INSTRUMENT_ID;
 
