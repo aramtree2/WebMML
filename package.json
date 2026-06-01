@@ -15,7 +15,8 @@
     "rc-dock": "^4.0.0-alpha.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-rnd": "^10.5.3"
+    "react-rnd": "^10.5.3",
+    "vexflow": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,0 +1,88 @@
+.score-panel {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    background: #fbfbf8;
+    color: #242424;
+    font-size: 12px;
+}
+
+.score-scroll {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+}
+
+.score-surface {
+    position: relative;
+    min-width: 100%;
+    min-height: 100%;
+    background: #fbfbf8;
+}
+
+.score-measure-header {
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 4;
+    height: 0;
+    pointer-events: none;
+}
+
+.score-measure-header-cell {
+    position: absolute;
+    top: 0;
+    box-sizing: border-box;
+    height: 22px;
+    border-left: 1px solid #b8b8b8;
+    border-bottom: 1px solid #cfcfcf;
+    background: rgba(248, 248, 246, 0.92);
+    color: #4a4a4a;
+    font-size: 12px;
+    line-height: 18px;
+    padding-right: 10px;
+    text-align: right;
+}
+
+.score-measure-header-cell:last-child {
+    border-right: 1px solid #b8b8b8;
+}
+
+.score-measure-header-cell.is-current {
+    background: transparent;
+}
+
+.score-render-layer {
+    position: relative;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.score-render-layer svg {
+    display: block;
+}
+
+.score-playback-highlight {
+    position: absolute;
+    z-index: 0;
+    display: none;
+    background: rgba(248, 113, 113, 0.12);
+    pointer-events: none;
+}
+
+.score-note-hit-target {
+    position: absolute;
+    z-index: 3;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.score-note-hit-target:focus {
+    outline: none;
+}

@@ -48,7 +48,8 @@ const NOTE_CYCLE_CLICK_DELAY_MS = 180;
 
 const AUTO_SCROLL_RIGHT_RATIO = 0.75;
 const AUTO_SCROLL_LEFT_RATIO = 0.15;
-const GRID_SUBDIVISION_OPTIONS = [0, 1, 2, 4, 8, 16, 32] as const;
+const SEEK_SCROLL_EVENT = "webmml:seek-scroll";
+const GRID_SUBDIVISION_OPTIONS = [0, 1, 2, 4, 8] as const;
 const EVENT_LANES = [
     {
         key: "automation",
@@ -148,9 +149,11 @@ export function PianoRollPanel() {
     const scrollAreaRef = useRef<HTMLDivElement | null>(null);
     const restoredViewStateRef = useRef(false);
     const focusedSelectionRef = useRef<string | null>(null);
+    const suppressedSelectionFocusRef = useRef<string | null>(null);
     const pendingNoteCycleTimerRef = useRef<number | null>(null);
     const noteDraftRef = useRef<PianoRollNoteDraft | null>(null);
     const noteResizeDraftRef = useRef<PianoRollNoteResizeDraft | null>(null);
+    const previousPaletteSnapItemRef = useRef<string | null>(null);
 
     const [project, setProject] = useState(() => getWmlProject());
     const [arrangementControls, setArrangementControls] = useState(() =>
@@ -389,6 +392,27 @@ export function PianoRollPanel() {
     }, []);
 
     useEffect(() => {
+        const snapItemKey =
+            selectedPaletteItem?.type === "note-duration"
+                ? `${selectedPaletteItem.type}:${selectedPaletteItem.denominator}`
+                : null;
+
+        if (previousPaletteSnapItemRef.current === snapItemKey) return;
+
+        previousPaletteSnapItemRef.current = snapItemKey;
+        if (selectedPaletteItem?.type !== "note-duration") return;
+        if (gridSubdivision <= 0) return;
+
+        const requiredSubdivision = getGridSubdivisionForNoteDenominator(
+            selectedPaletteItem.denominator,
+        );
+
+        if (requiredSubdivision > gridSubdivision) {
+            updateGridSubdivision(requiredSubdivision);
+        }
+    }, [gridSubdivision, selectedPaletteItem]);
+
+    useEffect(() => {
         return playbackEngine.subscribe((snapshot) => {
             setPlaybackSnapshot(snapshot);
         });
@@ -436,29 +460,47 @@ export function PianoRollPanel() {
 
     useEffect(() => {
         const selectionKey =
-            selectedChordId != null
+            selectedNoteId != null
+                ? `note:${selectedNoteId}`
+                : selectedChordId != null
                 ? `chord:${selectedChordId}`
                 : selectedSectionId != null
                   ? `section:${selectedSectionId}`
                   : null;
 
-        if (selectionKey == null || focusedSelectionRef.current === selectionKey) return;
+        if (selectionKey == null) return;
+
+        if (suppressedSelectionFocusRef.current === selectionKey) {
+            focusedSelectionRef.current = selectionKey;
+            suppressedSelectionFocusRef.current = null;
+            return;
+        }
+
+        if (focusedSelectionRef.current === selectionKey) return;
 
         const scrollArea = scrollAreaRef.current;
         if (!scrollArea) return;
 
-        const selectedNotes = pianoRollData.notes.filter((note) =>
-            selectedChordId != null
-                ? note.chordId === selectedChordId
-                : note.sectionId === selectedSectionId,
-        );
+        const selectedNotes = selectedNoteId != null
+            ? pianoRollData.notes.filter((note) => note.id === selectedNoteId)
+            : pianoRollData.notes.filter((note) =>
+                  selectedChordId != null
+                      ? note.chordId === selectedChordId
+                      : note.sectionId === selectedSectionId,
+              );
 
         if (selectedNotes.length === 0) return;
 
         const viewportLeft = scrollArea.scrollLeft;
         const viewportRight = viewportLeft + scrollArea.clientWidth;
         const horizontalVisibleNote = selectedNotes.find((note) =>
-            isNoteHorizontallyVisible(note, ticksPerBeat, beatWidth, viewportLeft, viewportRight),
+            isNoteHorizontallyVisible(
+                note,
+                ticksPerBeat,
+                beatWidth,
+                viewportLeft,
+                viewportRight,
+            ),
         );
         const targetNote =
             horizontalVisibleNote ??
@@ -504,6 +546,7 @@ export function PianoRollPanel() {
         rowHeight,
         rows,
         selectedChordId,
+        selectedNoteId,
         selectedSectionId,
         ticksPerBeat,
     ]);
@@ -549,6 +592,32 @@ export function PianoRollPanel() {
 
         setScrollPosition(nextScrollLeft, scrollArea.scrollTop);
     }, [playbackSnapshot.state, playheadLeft]);
+
+    useEffect(() => {
+        const handleSeekScroll = (event: Event) => {
+            const scrollArea = scrollAreaRef.current;
+            const customEvent = event as CustomEvent<SeekScrollEventDetail>;
+            const detail = customEvent.detail;
+            if (!scrollArea || detail?.source === "piano-roll") return;
+
+            const targetLeft = tickToX(detail.tick, ticksPerBeat, beatWidth);
+            const viewportLeft = scrollArea.scrollLeft;
+            const viewportRight = viewportLeft + scrollArea.clientWidth;
+
+            if (targetLeft >= viewportLeft && targetLeft <= viewportRight) return;
+
+            setScrollPosition(
+                targetLeft - scrollArea.clientWidth / 2,
+                scrollArea.scrollTop,
+            );
+        };
+
+        window.addEventListener(SEEK_SCROLL_EVENT, handleSeekScroll);
+
+        return () => {
+            window.removeEventListener(SEEK_SCROLL_EVENT, handleSeekScroll);
+        };
+    }, [beatWidth, ticksPerBeat]);
 
     useEffect(() => {
         const panel = panelRef.current;
@@ -607,6 +676,7 @@ export function PianoRollPanel() {
 
         playbackEngine.seek(seconds);
         setPlaybackSnapshot(playbackEngine.getSnapshot());
+        dispatchSeekScrollEvent("piano-roll", tick);
     };
 
     const updateTempoPreview = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -668,12 +738,14 @@ export function PianoRollPanel() {
 
         if (selectedIndex >= 0 && candidates.length > 1) {
             pendingNoteCycleTimerRef.current = window.setTimeout(() => {
+                suppressedSelectionFocusRef.current = `note:${noteId}`;
                 selectNote(sectionId, chordId, noteId);
                 pendingNoteCycleTimerRef.current = null;
             }, NOTE_CYCLE_CLICK_DELAY_MS);
             return;
         }
 
+        suppressedSelectionFocusRef.current = `note:${noteId}`;
         selectNote(sectionId, chordId, noteId);
     };
 
@@ -699,6 +771,7 @@ export function PianoRollPanel() {
         );
         if (!note?.sectionId || !note.chordId) return;
 
+        suppressedSelectionFocusRef.current = `note:${note.id}`;
         selectNote(note.sectionId, note.chordId, note.id);
 
         const panelRect = panelRef.current?.getBoundingClientRect();
@@ -1008,6 +1081,7 @@ export function PianoRollPanel() {
                     : section,
             ),
         }));
+        suppressedSelectionFocusRef.current = `note:${noteId}`;
         selectNote(draft.sectionId, draft.chordId, noteId);
     };
 
@@ -1390,12 +1464,11 @@ export function PianoRollPanel() {
                             style={{ left: playbackEndLeft }}
                         />
                     )}
-
-                    <div
-                        className="piano-roll-playhead-header"
-                        style={{ left: playheadLeft }}
-                    />
                 </div>
+                <div
+                    className="piano-roll-playhead-header"
+                    style={{ left: playheadLeft - scrollLeft }}
+                />
             </div>
 
             <div className="piano-roll-body" style={{ top: HEADER_HEIGHT }}>
@@ -1912,6 +1985,19 @@ function snapTickToGrid(tick: number, ticksPerBeat: number, subdivision: number)
     return Math.max(0, Math.round(Math.floor(tick / unitTick) * unitTick));
 }
 
+function getGridSubdivisionForNoteDenominator(denominator: number) {
+    switch (denominator) {
+        case 8:
+            return 2;
+        case 16:
+            return 4;
+        case 32:
+            return 8;
+        default:
+            return 1;
+    }
+}
+
 function getPaletteNoteDurationTick(denominator: number, ticksPerBeat: number) {
     return Math.max(1, Math.round(ticksPerBeat * 4 / denominator));
 }
@@ -2382,6 +2468,19 @@ function midiToName(midi: number) {
 
 function isBlackKey(midi: number) {
     return [1, 3, 6, 8, 10].includes(midi % 12);
+}
+
+type SeekScrollEventDetail = {
+    source: "score" | "piano-roll";
+    tick: number;
+};
+
+function dispatchSeekScrollEvent(source: SeekScrollEventDetail["source"], tick: number) {
+    window.dispatchEvent(
+        new CustomEvent<SeekScrollEventDetail>(SEEK_SCROLL_EVENT, {
+            detail: { source, tick },
+        }),
+    );
 }
 
 function clamp(value: number, min: number, max: number) {
