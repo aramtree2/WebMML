@@ -15,10 +15,6 @@ type MidiToWmlOptions = {
     selectedInstruments?: Record<number, string | number>;
 };
 
-type Voice = {
-    notes: NoteEvent[];
-    lastEndTick: number;
-};
 
 function normalizeInstrumentId(value: string | number | undefined): string {
     if (value === undefined || value === null) {
@@ -109,7 +105,7 @@ export function midiToWml(
 
         const selectedInstrument = normalizeInstrumentId(
             options.selectedInstruments?.[trackIndex] ??
-                getInstrumentIdFromMidiProgram(midiProgramNumber)
+            getInstrumentIdFromMidiProgram(midiProgramNumber)
         );
 
         const notes: NoteEvent[] = track.notes
@@ -134,19 +130,18 @@ export function midiToWml(
 
         if (notes.length === 0) return;
 
-        const chords = splitMidiNotesToChords(notes);
+        const chords: Chord[] = [
+            {
+                id: createId("chord"),
+                notes,
+            },
+        ];
 
         const section: WmlSection = {
             id: createId("section"),
             name: track.name || `Track${trackIndex + 1}`,
             instrument: selectedInstrument,
-            sustain: [
-                {
-                    id: createId("sustain"),
-                    tick: 0,
-                    value: selectedInstrument === DEFAULT_INSTRUMENT_ID ? 1 : 0,
-                },
-            ],
+            sustain: [],
             chords,
         };
 
@@ -156,33 +151,3 @@ export function midiToWml(
     return project;
 }
 
-function splitMidiNotesToChords(notes: NoteEvent[]): Chord[] {
-    const voices: Voice[] = [];
-
-    for (const note of notes) {
-        const startTick = note.tick;
-        const endTick = note.tick + note.duration;
-
-        let targetVoice = voices.find((voice) => voice.lastEndTick <= startTick);
-
-        if (!targetVoice) {
-            targetVoice = {
-                notes: [],
-                lastEndTick: 0,
-            };
-
-            voices.push(targetVoice);
-        }
-
-        targetVoice.notes.push(note);
-        targetVoice.lastEndTick = Math.max(targetVoice.lastEndTick, endTick);
-    }
-
-    return voices.map((voice) => ({
-        id: createId("chord"),
-        notes: voice.notes.sort((a, b) => {
-            if (a.tick !== b.tick) return a.tick - b.tick;
-            return a.pitch - b.pitch;
-        }),
-    }));
-}

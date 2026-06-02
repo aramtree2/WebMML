@@ -11,6 +11,9 @@ import { clearArrangementSelection } from "../../core/editor/arrangementControlS
 import { midiToWml } from "../../core/parser/midiToWml";
 import { mmlToWml, extractTracksInfo } from "../../core/parser/mmlToWml";
 
+import { setMmlMode } from "../../core/editor/editorSettingsStore";
+import { convertWmlToNormalMode } from "../../core/wml/wmlMmlMode";
+
 import {
     DEFAULT_INSTRUMENT_ID,
     getAllInstrumentDefs,
@@ -323,10 +326,10 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             return prev.map((row) =>
                 row.section === target.section
                     ? {
-                          ...row,
-                          section: from.section,
-                          instrument: from.instrument,
-                      }
+                        ...row,
+                        section: from.section,
+                        instrument: from.instrument,
+                    }
                     : row
             );
         });
@@ -392,10 +395,10 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             return prev.map((row) =>
                 row.section === current.section
                     ? {
-                          ...row,
-                          instrument,
-                          originalInstrument: instrument,
-                      }
+                        ...row,
+                        instrument,
+                        originalInstrument: instrument,
+                    }
                     : row
             );
         });
@@ -454,7 +457,15 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
             playbackEngine.stop();
             clearArrangementSelection();
             clearPaletteSelection();
-            setWmlProject(wml);
+
+            if (MIDI_EXTS.includes(ext)) {
+                setMmlMode(false);
+                setWmlProject(convertWmlToNormalMode(wml));
+            } else {
+                setMmlMode(true);
+                setWmlProject(wml);
+            }
+
             onClose();
         } catch (err) {
             console.error(err);
@@ -612,11 +623,10 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                                             </td>
 
                                             <td
-                                                className={`instrument-cell ${
-                                                    firstInSection
+                                                className={`instrument-cell ${firstInSection
                                                         ? "section-head"
                                                         : ""
-                                                }`}
+                                                    }`}
                                                 onClick={() =>
                                                     setInstrumentModalIndex(
                                                         track.index
@@ -625,8 +635,8 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                                             >
                                                 {firstInSection
                                                     ? getInstrumentName(
-                                                          track.instrument
-                                                      )
+                                                        track.instrument
+                                                    )
                                                     : ""}
                                             </td>
 
@@ -661,11 +671,10 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                             {INSTRUMENTS.map((inst) => (
                                 <button
                                     key={inst.id}
-                                    className={`instrument-btn ${
-                                        selectedTrack.instrument === inst.value
+                                    className={`instrument-btn ${selectedTrack.instrument === inst.value
                                             ? "active"
                                             : ""
-                                    }`}
+                                        }`}
                                     onClick={() => {
                                         changeInstrument(
                                             selectedTrack.index,

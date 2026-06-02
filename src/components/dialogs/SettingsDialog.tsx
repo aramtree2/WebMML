@@ -1,7 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import {
     getEditorSettings,
-    setMmlMode,
     subscribeEditorSettings,
 } from "../../core/editor/editorSettingsStore";
 import { ChangeMMLMode } from "./ChangeMMLMode";
@@ -17,11 +16,11 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
         subscribeEditorSettings,
         getEditorSettings
     );
-    const [changedMmlMode, setChangedMmlMode] = useState<boolean | null>(null);
 
-    const handleChangeMmlMode = (enabled: boolean) => {
-        setMmlMode(enabled);
-        setChangedMmlMode(enabled);
+    const [pendingMmlMode, setPendingMmlMode] = useState<boolean | null>(null);
+
+    const handleRequestChangeMmlMode = (enabled: boolean) => {
+        setPendingMmlMode(enabled);
     };
 
     return (
@@ -30,14 +29,18 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
                 <div className="settings-dialog">
                     <label className="settings-dialog__row">
                         <span className="settings-dialog__label">MML 모드</span>
+
                         <span className="settings-dialog__switch">
                             <input
                                 type="checkbox"
                                 checked={settings.mmlMode}
                                 onChange={(event) =>
-                                    handleChangeMmlMode(event.target.checked)
+                                    handleRequestChangeMmlMode(
+                                        event.target.checked
+                                    )
                                 }
                             />
+
                             <span className="settings-dialog__switch-track">
                                 <span className="settings-dialog__switch-thumb" />
                             </span>
@@ -46,10 +49,11 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
                 </div>
             </DialogFrame>
 
-            {changedMmlMode !== null && (
+            {pendingMmlMode !== null && (
                 <ChangeMMLMode
-                    enabled={changedMmlMode}
-                    onClose={() => setChangedMmlMode(null)}
+                    enabled={pendingMmlMode}
+                    onConfirm={() => setPendingMmlMode(null)}
+                    onClose={() => setPendingMmlMode(null)}
                 />
             )}
         </>
