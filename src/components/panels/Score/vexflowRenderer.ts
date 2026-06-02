@@ -1,19 +1,24 @@
 import {
     Accidental,
     BarlineType,
+    Beam,
     Dot,
     Formatter,
+    Fraction,
     Renderer,
     Stave,
     StaveConnector,
     StaveNote,
+    StaveTempo,
     StaveTie,
     Voice,
 } from "vexflow";
 import type { ArrangementControlState } from "../../../core/editor/arrangementControlStore";
 import type {
     ScoreChordGroup,
+    ScoreDynamicText,
     ScoreEvent,
+    ScoreMeasure,
     ScoreModel,
     ScoreSection,
     ScoreStaff,
@@ -21,6 +26,10 @@ import type {
 
 const MEASURE_WIDTH = 190;
 const FIRST_MEASURE_WIDTH = 250;
+const FORMATTER_PADDING = 12;
+const MIN_FORMATTER_WIDTH = 24;
+const FIRST_MEASURE_NOTATION_WIDTH = 64;
+const TIME_SIGNATURE_NOTATION_WIDTH = 28;
 const MIN_EVENT_WIDTH = 34;
 const ACCIDENTAL_WIDTH = 14;
 const CHORD_TONE_WIDTH = 7;
@@ -34,8 +43,12 @@ const CHORD_GROUP_GAP = 20;
 const SECTION_GAP = 34;
 const BOTTOM_MARGIN = 28;
 const VIRTUAL_STAFF_PADDING = 82;
-const BRACKET_CONNECTOR_X_OFFSET = -8;
-const BRACE_CONNECTOR_X_OFFSET = -18;
+const BRACKET_CONNECTOR_X_OFFSET = -18;
+const BRACE_CONNECTOR_X_OFFSET = 0;
+const TEMPO_MARK_Y_SHIFT = -14;
+const DYNAMIC_TEXT_Y_OFFSET = 24;
+const DYNAMIC_TEXT_HEIGHT = 24;
+const DYNAMIC_NOTE_HEAD_CLEARANCE = 8;
 const TREBLE_TOP_STAFF_PITCH = 77;
 const TREBLE_BOTTOM_STAFF_PITCH = 64;
 const STAFF_STEP_HEIGHT = 5;
@@ -43,6 +56,13 @@ const EXTRA_LEDGER_PADDING = 18;
 const SELECTED_SECTION_COLOR = "#1d4ed8";
 const SELECTED_CHORD_COLOR = "#c2410c";
 const SELECTED_NOTE_COLOR = "#ec4899";
+const DYNAMIC_GLYPHS: Record<ScoreDynamicText, string> = {
+    pp: "\uE52B",
+    mp: "\uE52C",
+    mf: "\uE52D",
+    f: "\uE522",
+    ff: "\uE52F",
+};
 
 export type ScoreNoteSelection = {
     sectionId: string;
@@ -53,6 +73,7 @@ export type ScoreNoteSelection = {
 type RenderedScoreEvent = {
     event: ScoreEvent;
     note: StaveNote;
+    stave: Stave;
 };
 
 type RenderedStaff = {
@@ -123,6 +144,7 @@ export function renderScore(
     selection: ArrangementControlState,
     zoom: number,
     onSelectNote?: (selection: ScoreNoteSelection) => void,
+    onEditNote?: (selection: ScoreNoteSelection, event: MouseEvent) => void,
 ): RenderScoreResult {
     container.innerHTML = "";
 
@@ -183,8 +205,10 @@ export function renderScore(
     });
 
     drawConnectors(context, renderedSections, renderedChordGroups);
+    drawTempoMarks(context, score, layout.rows, measureWidths);
+    drawDynamicMarks(context, layout.sections, renderedEvents);
     drawTies(context, renderedEvents, selection);
-    createNoteHitTargets(container, renderedEvents, zoom, onSelectNote);
+    createNoteHitTargets(container, renderedEvents, zoom, onSelectNote, onEditNote);
 
     return {
         measureRegions: createMeasureRegions(score, measureWidths, height),
@@ -232,6 +256,7 @@ function drawStaff({
         const events = measure.events.map((event) => ({
             event,
             note: createStaveNote(event, selection),
+            stave,
         }));
         const notes = events.map((event) => event.note);
 
@@ -242,8 +267,20 @@ function drawStaff({
             }).setMode(Voice.Mode.SOFT);
 
             voice.addTickables(notes);
-            new Formatter().joinVoices([voice]).format([voice], width - 54);
+            new Formatter().joinVoices([voice]).format(
+                [voice],
+                getMeasureFormatWidth(stave),
+            );
+            const beams = Beam.generateBeams(notes, {
+                groups: getBeamGroups(measure),
+                maintainStemDirections: true,
+            });
+            const beamSelectionColors = getBeamSelectionColors(beams, events, selection);
+
             voice.draw(context, stave);
+            beams.forEach((beam) =>
+                drawBeamWithSelectionColor(context, beam, beamSelectionColors.get(beam)),
+            );
         }
 
         staves.push(stave);
@@ -258,6 +295,77 @@ function drawStaff({
         bottomStave: staves.at(-1) ?? staves[0],
         renderedEvents,
     };
+}
+
+function getBeamSelectionColors(
+    beams: Beam[],
+    events: RenderedScoreEvent[],
+    selection: ArrangementControlState,
+) {
+    const colors = new Map<Beam, string>();
+
+    beams.forEach((beam) => {
+        const selectionColor = getBeamSelectionColor(beam, events, selection);
+        if (selectionColor == null) return;
+
+        colors.set(beam, selectionColor);
+    });
+
+    return colors;
+}
+
+function drawBeamWithSelectionColor(
+    context: ReturnType<Renderer["getContext"]>,
+    beam: Beam,
+    selectionColor?: string,
+) {
+    if (selectionColor == null) {
+        beam.setContext(context).draw();
+        return;
+    }
+
+    context.save();
+    context.setFillStyle(selectionColor);
+    context.setStrokeStyle(selectionColor);
+    beam.setContext(context).draw();
+    context.restore();
+}
+
+function getBeamSelectionColor(
+    beam: Beam,
+    events: RenderedScoreEvent[],
+    selection: ArrangementControlState,
+) {
+    const colors: string[] = beam.getNotes()
+        .map((note) => events.find((event) => event.note === note)?.event)
+        .filter((event): event is ScoreEvent => event != null)
+        .map((event) => getEventSelectionColor(event, selection))
+        .filter((color) => color != null);
+
+    if (colors.includes(SELECTED_NOTE_COLOR)) return SELECTED_NOTE_COLOR;
+    if (colors.includes(SELECTED_CHORD_COLOR)) return SELECTED_CHORD_COLOR;
+    if (colors.includes(SELECTED_SECTION_COLOR)) return SELECTED_SECTION_COLOR;
+
+    return null;
+}
+
+function getBeamGroups(measure: ScoreMeasure) {
+    if (isCompoundTimeSignature(measure)) {
+        return [new Fraction(3, measure.denominator)];
+    }
+
+    return [new Fraction(1, measure.denominator)];
+}
+
+function isCompoundTimeSignature(measure: ScoreMeasure) {
+    return measure.denominator === 8 && measure.numerator > 3 && measure.numerator % 3 === 0;
+}
+
+function getMeasureFormatWidth(stave: Stave) {
+    return Math.max(
+        MIN_FORMATTER_WIDTH,
+        stave.getNoteEndX() - stave.getNoteStartX() - FORMATTER_PADDING,
+    );
 }
 
 function drawConnectors(
@@ -310,6 +418,135 @@ function createOffsetStave(stave: Stave, offsetX: number): Stave {
     offsetStave.getX = () => stave.getX() + offsetX;
 
     return offsetStave;
+}
+
+function drawTempoMarks(
+    context: ReturnType<Renderer["getContext"]>,
+    score: ScoreModel,
+    rows: ScoreLayoutRow[],
+    measureWidths: number[],
+) {
+    const topRenderedStaff = rows[0]?.renderedStaff;
+    if (!topRenderedStaff) return;
+
+    score.tempos.forEach((tempo) => {
+        const stave = getRenderedStaveAtTick(topRenderedStaff, tempo.tick);
+        if (!stave) return;
+
+        new StaveTempo(
+            {
+                duration: "q",
+                bpm: tempo.bpm,
+            },
+            getXForTick(score, measureWidths, tempo.tick),
+            TEMPO_MARK_Y_SHIFT,
+        )
+            .setStave(stave)
+            .setContext(context)
+            .draw();
+    });
+}
+
+function drawDynamicMarks(
+    context: ReturnType<Renderer["getContext"]>,
+    sections: ScoreSectionLayout[],
+    renderedEvents: RenderedScoreEvent[],
+) {
+    sections.forEach((section) => {
+        section.chordGroups.forEach((group) => {
+            group.chordGroup.dynamics.forEach((dynamic) => {
+                const event = findRenderedEventForDynamic(
+                    renderedEvents,
+                    group.chordGroup.id,
+                    dynamic.tick,
+                );
+                if (!event) return;
+
+                const box = event.note.getBoundingBox();
+                const x = box.getX();
+                const y = getDynamicMarkY(event.note, event.stave);
+
+                drawDynamicText(context, dynamic.text, x, y);
+            });
+        });
+    });
+}
+
+function findRenderedEventForDynamic(
+    renderedEvents: RenderedScoreEvent[],
+    chordId: string,
+    tick: number,
+) {
+    return renderedEvents.find((event) =>
+        event.event.type === "note" &&
+        event.event.chordId === chordId &&
+        event.event.tick === tick,
+    );
+}
+
+function getDynamicMarkY(note: StaveNote, stave: Stave) {
+    const staffBottom = stave.getYForLine(4);
+    const ys = note.getYs();
+    const keyBottom = ys.length === 0
+        ? staffBottom
+        : Math.max(...ys) + DYNAMIC_NOTE_HEAD_CLEARANCE;
+
+    return Math.max(staffBottom, keyBottom) + DYNAMIC_TEXT_Y_OFFSET;
+}
+
+function drawDynamicText(
+    context: ReturnType<Renderer["getContext"]>,
+    text: ScoreDynamicText,
+    x: number,
+    y: number,
+) {
+    context.save();
+    context.setFont("Bravura", 24, "normal", "normal");
+    context.fillText(dynamicTextToGlyph(text), x, y);
+    context.restore();
+}
+
+function dynamicTextToGlyph(text: ScoreDynamicText) {
+    return DYNAMIC_GLYPHS[text];
+}
+
+function getRenderedStaveAtTick(renderedStaff: RenderedStaff, tick: number) {
+    const measure = renderedStaff.staff.measures.find(
+        (candidate) =>
+            tick >= candidate.startTick &&
+            tick < candidate.startTick + candidate.durationTick,
+    );
+    if (!measure) return renderedStaff.staves.at(-1) ?? null;
+
+    return renderedStaff.staves[measure.index] ?? null;
+}
+
+function getXForTick(
+    score: ScoreModel,
+    measureWidths: number[],
+    tick: number,
+) {
+    const firstStaff = score.sections[0]?.chordGroups[0]?.staves[0];
+    const measure = firstStaff?.measures.find(
+        (candidate) =>
+            tick >= candidate.startTick &&
+            tick < candidate.startTick + candidate.durationTick,
+    );
+
+    if (!measure) return getMeasureX(measureWidths, measureWidths.length - 1);
+
+    const measureX = getMeasureX(measureWidths, measure.index);
+    const measureWidth = measureWidths[measure.index] ?? MEASURE_WIDTH;
+    const ratio = (tick - measure.startTick) / measure.durationTick;
+
+    return measureX + measureWidth * Math.max(0, Math.min(1, ratio));
+}
+
+function getMeasureX(measureWidths: number[], measureIndex: number) {
+    return LEFT_MARGIN +
+        measureWidths
+            .slice(0, measureIndex)
+            .reduce((sum, width) => sum + width, 0);
 }
 
 function createStaveNote(
@@ -420,14 +657,21 @@ function drawTies(
                 lastIndexes,
             }).setContext(context);
 
-            tie.setStyle({
-                strokeStyle: selectionColor,
-                fillStyle: selectionColor,
-            });
-
-            tie.draw();
+            drawTieWithSelectionColor(context, tie, selectionColor);
         });
     });
+}
+
+function drawTieWithSelectionColor(
+    context: ReturnType<Renderer["getContext"]>,
+    tie: StaveTie,
+    selectionColor: string,
+) {
+    context.save();
+    context.setFillStyle(selectionColor);
+    context.setStrokeStyle(selectionColor);
+    tie.draw();
+    context.restore();
 }
 
 function createNoteHitTargets(
@@ -435,8 +679,9 @@ function createNoteHitTargets(
     renderedEvents: RenderedScoreEvent[],
     zoom: number,
     onSelectNote?: (selection: ScoreNoteSelection) => void,
+    onEditNote?: (selection: ScoreNoteSelection, event: MouseEvent) => void,
 ) {
-    if (!onSelectNote) return;
+    if (!onSelectNote && !onEditNote) return;
 
     renderedEvents.forEach(({ event, note }) => {
         if (
@@ -448,6 +693,7 @@ function createNoteHitTargets(
             return;
         }
 
+        const noteEvent = event;
         const box = note.getBoundingBox();
         const hitTarget = document.createElement("button");
         hitTarget.type = "button";
@@ -460,15 +706,48 @@ function createNoteHitTargets(
             clickEvent.preventDefault();
             clickEvent.stopPropagation();
 
-            onSelectNote({
-                sectionId: event.sectionId!,
-                chordId: event.chordId!,
-                noteId: getClosestNoteId(container, event, note, zoom, clickEvent.clientY),
-            });
+            const selection = getNoteSelectionFromPointer(
+                container,
+                noteEvent,
+                note,
+                zoom,
+                clickEvent.clientY,
+            );
+
+            onSelectNote?.(selection);
+        });
+        hitTarget.addEventListener("dblclick", (dblClickEvent) => {
+            dblClickEvent.preventDefault();
+            dblClickEvent.stopPropagation();
+
+            const selection = getNoteSelectionFromPointer(
+                container,
+                noteEvent,
+                note,
+                zoom,
+                dblClickEvent.clientY,
+            );
+
+            onSelectNote?.(selection);
+            onEditNote?.(selection, dblClickEvent);
         });
 
         container.appendChild(hitTarget);
     });
+}
+
+function getNoteSelectionFromPointer(
+    container: HTMLDivElement,
+    event: ScoreEvent,
+    note: StaveNote,
+    zoom: number,
+    clientY: number,
+): ScoreNoteSelection {
+    return {
+        sectionId: event.sectionId!,
+        chordId: event.chordId!,
+        noteId: getClosestNoteId(container, event, note, zoom, clientY),
+    };
 }
 
 function getClosestNoteId(
@@ -623,6 +902,8 @@ function getLayoutHeight(rows: ScoreLayoutRow[]) {
     return lastRow.y +
         STAFF_BODY_HEIGHT +
         lastRow.below +
+        DYNAMIC_TEXT_Y_OFFSET +
+        DYNAMIC_TEXT_HEIGHT +
         VIRTUAL_STAFF_PADDING +
         BOTTOM_MARGIN;
 }
@@ -635,7 +916,7 @@ function estimateStaffVerticalSpace(staff: ScoreStaff) {
     if (pitches.length === 0) {
         return {
             above: 0,
-            below: 0,
+            below: DYNAMIC_TEXT_Y_OFFSET,
         };
     }
 
@@ -644,7 +925,9 @@ function estimateStaffVerticalSpace(staff: ScoreStaff) {
 
     return {
         above: estimatePitchOverflow(highest - TREBLE_TOP_STAFF_PITCH),
-        below: estimatePitchOverflow(TREBLE_BOTTOM_STAFF_PITCH - lowest),
+        below:
+            estimatePitchOverflow(TREBLE_BOTTOM_STAFF_PITCH - lowest) +
+            DYNAMIC_TEXT_Y_OFFSET,
     };
 }
 
@@ -725,12 +1008,22 @@ function getRequiredMeasureWidth(score: ScoreModel, measureIndex: number) {
                     0,
                 );
 
-                maxStaffWidth = Math.max(maxStaffWidth, eventWidth);
+                maxStaffWidth = Math.max(
+                    maxStaffWidth,
+                    eventWidth + getMeasureNotationWidth(measure),
+                );
             });
         });
     });
 
     return maxStaffWidth + 68;
+}
+
+function getMeasureNotationWidth(measure: ScoreMeasure) {
+    return (
+        (measure.index === 0 ? FIRST_MEASURE_NOTATION_WIDTH : 0) +
+        (measure.showTimeSignature ? TIME_SIGNATURE_NOTATION_WIDTH : 0)
+    );
 }
 
 function estimateEventWidth(event: ScoreEvent) {

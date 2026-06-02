@@ -7,17 +7,20 @@ import {
 } from "../../../core/editor/arrangementControlStore";
 import { playbackEngine, secondsToTick, tickToSeconds } from "../../../core/playback";
 import { getWmlProject, subscribeWmlProject } from "../../../core/wml/wmlStore";
+import { EventEditorFloatingWindow } from "../../eventEditor";
+import type { EventEditorAnchor, EventEditorTarget } from "../../eventEditor";
 import { wmlProjectToScoreModel } from "./scoreMapper";
 import { renderScore } from "./vexflowRenderer";
 import type { ScoreChordRegion, ScoreMeasureRegion } from "./vexflowRenderer";
 import "./ScorePanel.css";
 
 const DEFAULT_ZOOM = 0.5;
-const MIN_ZOOM = 0.5;
+const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 2.5;
 const ZOOM_STEP = 0.1;
 
 export function ScorePanel() {
+    const panelRef = useRef<HTMLDivElement | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const scoreRef = useRef<HTMLDivElement | null>(null);
     const playbackHighlightRef = useRef<HTMLDivElement | null>(null);
@@ -41,6 +44,11 @@ export function ScorePanel() {
     const [currentTick, setCurrentTick] = useState(() =>
         secondsToTick(playbackEngine.getSnapshot().currentTime, getWmlProject().tempos),
     );
+    const [editorTarget, setEditorTarget] = useState<EventEditorTarget | null>(null);
+    const [editorAnchor, setEditorAnchor] = useState<EventEditorAnchor | null>(null);
+    const [editorBounds, setEditorBounds] = useState<{ width: number; height: number } | null>(
+        null,
+    );
 
     const score = useMemo(
         () => wmlProjectToScoreModel(project, arrangementControls),
@@ -57,6 +65,48 @@ export function ScorePanel() {
         },
         [],
     );
+    const handleEditNote = useCallback(
+        (
+            selection: { sectionId: string; chordId: string; noteId: string },
+            event: MouseEvent,
+        ) => {
+            suppressedSelectionFocusRef.current = getSelectionKey({
+                selectedSectionId: selection.sectionId,
+                selectedChordId: selection.chordId,
+                selectedNoteId: selection.noteId,
+            });
+            selectNote(selection.sectionId, selection.chordId, selection.noteId);
+
+            const panelRect = panelRef.current?.getBoundingClientRect();
+
+            setEditorTarget({
+                type: "note",
+                noteId: selection.noteId,
+                sectionId: selection.sectionId,
+                chordId: selection.chordId,
+            });
+            setEditorAnchor(
+                panelRect
+                    ? {
+                          x: event.clientX - panelRect.left + 8,
+                          y: event.clientY - panelRect.top + 8,
+                      }
+                    : null,
+            );
+            setEditorBounds(
+                panelRect
+                    ? {
+                          width: panelRect.width,
+                          height: panelRect.height,
+                      }
+                    : null,
+            );
+        },
+        [],
+    );
+    const closeEventEditor = useCallback(() => {
+        setEditorTarget(null);
+    }, []);
     const handleSurfaceClick = useCallback(
         (event: React.MouseEvent<HTMLDivElement>) => {
             const target = event.target;
@@ -128,6 +178,7 @@ export function ScorePanel() {
             arrangementControls,
             zoom,
             handleSelectNote,
+            handleEditNote,
         );
         measureRegionsRef.current = result.measureRegions;
         chordRegionsRef.current = result.chordRegions;
@@ -183,6 +234,7 @@ export function ScorePanel() {
         zoomRef.current = zoom;
     }, [
         arrangementControls,
+        handleEditNote,
         handleSelectNote,
         project.tempos,
         score,
@@ -246,7 +298,7 @@ export function ScorePanel() {
     }, []);
 
     return (
-        <div className="score-panel">
+        <div ref={panelRef} className="score-panel">
             <div ref={scrollRef} className="score-scroll" onClick={handleSurfaceClick}>
                 <div className="score-surface">
                     <div
@@ -278,6 +330,13 @@ export function ScorePanel() {
                     <div ref={scoreRef} className="score-render-layer" />
                 </div>
             </div>
+            <EventEditorFloatingWindow
+                target={editorTarget}
+                anchor={editorAnchor}
+                bounds={editorBounds}
+                project={project}
+                onClose={closeEventEditor}
+            />
         </div>
     );
 }

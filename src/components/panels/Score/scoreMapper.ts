@@ -3,6 +3,7 @@ import { WML_TICKS_PER_QUARTER } from "../../../core/wml/wmlUtils";
 import type {
     Chord,
     NoteEvent,
+    TempoEvent,
     TimeSignatureEvent,
     WmlProject,
     WmlSection,
@@ -41,6 +42,7 @@ export type ScoreStaff = {
 
 export type ScoreChordGroup = {
     id: string;
+    dynamics: ScoreDynamicMark[];
     staves: ScoreStaff[];
 };
 
@@ -53,8 +55,21 @@ export type ScoreSection = {
 export type ScoreModel = {
     ticksPerBeat: number;
     measureCount: number;
+    tempos: ScoreTempoMark[];
     sections: ScoreSection[];
 };
+
+export type ScoreTempoMark = {
+    tick: number;
+    bpm: number;
+};
+
+export type ScoreDynamicMark = {
+    tick: number;
+    text: ScoreDynamicText;
+};
+
+export type ScoreDynamicText = "pp" | "mp" | "mf" | "f" | "ff";
 
 type NoteCluster = {
     tick: number;
@@ -102,6 +117,7 @@ export function wmlProjectToScoreModel(
     return {
         ticksPerBeat: WML_TICKS_PER_QUARTER,
         measureCount: measureSpecs.length,
+        tempos: createTempoMarks(project.tempos),
         sections: visibleSections.map((section) =>
             createScoreSection(section, measureSpecs, controls),
         ),
@@ -132,6 +148,7 @@ function createScoreChordGroup(
 
     return {
         id: chord.id,
+        dynamics: createDynamicMarks(chord.notes),
         staves: (lanes.length > 0 ? lanes : [{ clusters: [], endTick: 0 }]).map(
             (lane, index) => ({
                 id: `${chord.id}:${index}`,
@@ -144,6 +161,55 @@ function createScoreChordGroup(
             }),
         ),
     };
+}
+
+function createTempoMarks(tempos: TempoEvent[]): ScoreTempoMark[] {
+    return [...tempos]
+        .sort((a, b) => a.tick - b.tick)
+        .map((tempo) => ({
+            tick: quantizeTick(tempo.tick),
+            bpm: tempo.bpm,
+        }));
+}
+
+function createDynamicMarks(notes: NoteEvent[]): ScoreDynamicMark[] {
+    const byTick = new Map<number, number>();
+
+    notes.forEach((note) => {
+        const tick = quantizeTick(note.tick);
+        const velocity = normalizeVelocity(note.velocity);
+
+        byTick.set(tick, Math.max(byTick.get(tick) ?? 0, velocity));
+    });
+
+    const marks: ScoreDynamicMark[] = [];
+    let previousText: ScoreDynamicText | null = null;
+
+    [...byTick.entries()]
+        .sort(([tickA], [tickB]) => tickA - tickB)
+        .forEach(([tick, velocity]) => {
+            const text = velocityToDynamicText(velocity);
+
+            if (text === previousText) return;
+
+            marks.push({ tick, text });
+            previousText = text;
+        });
+
+    return marks;
+}
+
+function normalizeVelocity(value: number) {
+    return Math.max(0, Math.min(15, Math.round(value)));
+}
+
+function velocityToDynamicText(velocity: number): ScoreDynamicText {
+    if (velocity <= 3) return "pp";
+    if (velocity <= 7) return "mp";
+    if (velocity <= 11) return "mf";
+    if (velocity <= 13) return "f";
+
+    return "ff";
 }
 
 function createMeasuresForLane(
