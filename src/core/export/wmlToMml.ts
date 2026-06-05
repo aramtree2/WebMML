@@ -7,23 +7,7 @@ import type {
 
 const TPQN = 480;
 
-function getDurationMML(tick: number): string {
-    const candidates: { duration: number; text: string }[] = [];
 
-    for (const len of [1, 2, 4, 8, 16, 32, 64]) {
-        const base = (TPQN * 4) / len;
-
-        candidates.push({ duration: Math.round(base), text: String(len) });
-        candidates.push({ duration: Math.round(base * 1.5), text: `${len}.` });
-        candidates.push({ duration: Math.round(base * 1.75), text: `${len}..` });
-    }
-
-    candidates.sort(
-        (a, b) => Math.abs(a.duration - tick) - Math.abs(b.duration - tick)
-    );
-
-    return candidates[0]?.text ?? "4";
-}
 
 function pitchToNote(pitch: number): { note: string; octave: number } {
     const names = [
@@ -47,6 +31,17 @@ function pitchToNote(pitch: number): { note: string; octave: number } {
     };
 }
 
+function noteMML(noteName: string, tick: number): string {
+    const parts = getDurationMMLParts(tick);
+
+    if (parts.length === 0) {
+        return noteName + "4";
+    }
+
+    return parts
+        .map((duration) => noteName + duration)
+        .join("&");
+}
 
 function chordToMMLPart(chordNotes: NoteEvent[]): string {
     const notes = chordNotes
@@ -80,9 +75,12 @@ function chordToMMLPart(chordNotes: NoteEvent[]): string {
             currentVelocity = note.velocity;
         }
 
-        result.push(noteName + getDurationMML(note.duration));
+        result.push(noteMML(noteName, note.duration));
 
-        currentTick = Math.max(currentTick, note.tick + note.duration);
+        currentTick = Math.max(
+            currentTick,
+            note.tick + note.duration
+        );
     }
 
     return result.join("");
