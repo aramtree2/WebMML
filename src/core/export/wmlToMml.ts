@@ -7,9 +7,9 @@ import type {
 
 const TPQN = 480;
 
-
-
-function pitchToNote(pitch: number): { note: string; octave: number } {
+function pitchToNote(
+    pitch: number
+): { note: string; octave: number } {
     const names = [
         "C",
         "C+",
@@ -31,7 +31,29 @@ function pitchToNote(pitch: number): { note: string; octave: number } {
     };
 }
 
-function noteMML(noteName: string, tick: number): string {
+function octaveCommand(
+    current: number,
+    target: number
+): string {
+    const diff = target - current;
+
+    if (diff === 0) {
+        return "";
+    }
+
+    if (Math.abs(diff) <= 2) {
+        return diff > 0
+            ? ">".repeat(diff)
+            : "<".repeat(-diff);
+    }
+
+    return "O" + target;
+}
+
+function noteMML(
+    noteName: string,
+    tick: number
+): string {
     const parts = getDurationMMLParts(tick);
 
     if (parts.length === 0) {
@@ -39,34 +61,52 @@ function noteMML(noteName: string, tick: number): string {
     }
 
     return parts
-        .map((duration) => noteName + duration)
+        .map(
+            (duration) =>
+                noteName + duration
+        )
         .join("&");
 }
 
-function chordToMMLPart(chordNotes: NoteEvent[]): string {
+function chordToMMLPart(
+    chordNotes: NoteEvent[]
+): string {
     const notes = chordNotes
         .slice()
         .sort((a, b) => {
-            if (a.tick !== b.tick) return a.tick - b.tick;
+            if (a.tick !== b.tick) {
+                return a.tick - b.tick;
+            }
+
             return a.pitch - b.pitch;
         });
 
     const result: string[] = [];
 
-    let currentTick = 0;
+    let playhead = 0;
     let currentOctave = 4;
     let currentVelocity = 8;
 
     for (const note of notes) {
-        if (note.tick > currentTick) {
-            result.push(restMML(note.tick - currentTick));
-            currentTick = note.tick;
+        const gap = note.tick - playhead;
+
+        if (gap > 0) {
+            result.push(restMML(gap));
         }
 
-        const { note: noteName, octave } = pitchToNote(note.pitch);
+        const {
+            note: noteName,
+            octave,
+        } = pitchToNote(note.pitch);
 
         if (octave !== currentOctave) {
-            result.push("O" + octave);
+            result.push(
+                octaveCommand(
+                    currentOctave,
+                    octave
+                )
+            );
+
             currentOctave = octave;
         }
 
@@ -75,107 +115,266 @@ function chordToMMLPart(chordNotes: NoteEvent[]): string {
             currentVelocity = note.velocity;
         }
 
-        result.push(noteMML(noteName, note.duration));
-
-        currentTick = Math.max(
-            currentTick,
-            note.tick + note.duration
+        result.push(
+            noteMML(
+                noteName,
+                note.duration
+            )
         );
+
+        playhead =
+            note.tick +
+            note.duration;
     }
 
     return result.join("");
 }
 
-function sectionToMML(section: WmlSection, tempoEvents: TempoEvent[]): string {
+function sectionToMML(
+    section: WmlSection,
+    tempoEvents: TempoEvent[]
+): string {
     const parts: string[] = [];
 
     const tempoPrefix = tempoEvents
         .slice()
         .sort((a, b) => a.tick - b.tick)
-        .filter((tempo) => tempo.tick === 0)
-        .map((tempo) => "T" + tempo.bpm)
+        .filter(
+            (tempo) =>
+                tempo.tick === 0
+        )
+        .map(
+            (tempo) =>
+                "T" + tempo.bpm
+        )
         .join("");
 
     const sustainPrefix = section.sustain
         .slice()
         .sort((a, b) => a.tick - b.tick)
-        .filter((sustain) => sustain.tick === 0)
-        .map((sustain) => "S" + sustain.value)
+        .filter(
+            (sustain) =>
+                sustain.tick === 0 &&
+                sustain.value !== 0
+        )
+        .map(
+            (sustain) =>
+                "S" + sustain.value
+        )
         .join("");
 
     section.chords
         .slice()
         .sort((a, b) => {
-            const aTick = a.notes[0]?.tick ?? 0;
-            const bTick = b.notes[0]?.tick ?? 0;
+            const aTick =
+                a.notes[0]?.tick ?? 0;
+
+            const bTick =
+                b.notes[0]?.tick ?? 0;
+
             return aTick - bTick;
         })
-        .forEach((chord, chordIndex) => {
-            const prefix = chordIndex === 0 ? tempoPrefix + sustainPrefix : "";
-            parts.push(prefix + chordToMMLPart(chord.notes));
-        });
+        .forEach(
+            (chord, index) => {
+                const prefix =
+                    index === 0
+                        ? tempoPrefix +
+                          sustainPrefix
+                        : "";
 
-    return parts.join(",");
+                parts.push(
+                    prefix +
+                        chordToMMLPart(
+                            chord.notes
+                        )
+                );
+            }
+        );
+
+    return parts.join("");
 }
 
-export function wmlToMml(input: WmlProject | string): string {
+export function wmlToMml(
+    input: WmlProject | string
+): string {
     const wml: WmlProject =
-        typeof input === "string" ? (JSON.parse(input) as WmlProject) : input;
+        typeof input === "string"
+            ? (JSON.parse(
+                  input
+              ) as WmlProject)
+            : input;
 
-    const tempos = wml.tempos ?? [];
-    const sections = wml.sections ?? [];
+    const tempos =
+        wml.tempos ?? [];
+
+    const sections =
+        wml.sections ?? [];
 
     return sections
-        .map((section, index) => {
-            const sectionMml = sectionToMML(section, tempos);
+        .map(
+            (section, index) => {
+                const sectionMml =
+                    sectionToMML(
+                        section,
+                        tempos
+                    );
 
-            return [
-                `mml-track=${"MML@" + sectionMml + ";"}`,
-                `name=Track ${index + 1}`,
-                `program=${section.instrument ?? 1}`,
-            ].join("\n");
-        })
+                return [
+                    `mml-track=MML@${sectionMml};`,
+                    `name=Track ${index + 1}`,
+                    `program=${section.instrument ?? 1}`,
+                ].join("\n");
+            }
+        )
         .join("\n\n");
 }
 
-export function wmlFileToMmlText(wmlJsonText: string): string {
-    const wml = JSON.parse(wmlJsonText) as WmlProject;
+export function wmlFileToMmlText(
+    wmlJsonText: string
+): string {
+    const wml = JSON.parse(
+        wmlJsonText
+    ) as WmlProject;
+
     return wmlToMml(wml);
 }
 
-function getDurationMMLParts(tick: number): string[] {
-    const units: { duration: number; text: string }[] = [];
+const durationCache =
+    new Map<number, string[]>();
 
-    for (const len of [1, 2, 4, 8, 16, 32, 64]) {
-        const base = (TPQN * 4) / len;
+function getDurationMMLParts(
+    tick: number
+): string[] {
+    tick = Math.round(tick);
 
-        units.push({ duration: Math.round(base * 1.75), text: `${len}..` });
-        units.push({ duration: Math.round(base * 1.5), text: `${len}.` });
-        units.push({ duration: Math.round(base), text: String(len) });
+    const cached =
+        durationCache.get(tick);
+
+    if (cached) {
+        return cached;
     }
 
-    units.sort((a, b) => b.duration - a.duration);
+    const units: {
+        duration: number;
+        text: string;
+    }[] = [];
 
-    const result: string[] = [];
-    let remain = Math.round(tick);
+    for (let len = 1; len <= 64; len++) {
+        const base =
+            (TPQN * 4) / len;
 
-    while (remain > 0) {
-        const unit =
-            units.find((u) => u.duration <= remain) ??
-            units[units.length - 1];
+        let mul = 1;
+        let add = 0.5;
 
-        result.push(unit.text);
-        remain -= unit.duration;
+        units.push({
+            duration: Math.round(base),
+            text: String(len),
+        });
 
-        if (result.length > 10000) break;
+        for (
+            let dots = 1;
+            dots <= 4;
+            dots++
+        ) {
+            mul += add;
+            add /= 2;
+
+            units.push({
+                duration: Math.round(
+                    base * mul
+                ),
+                text:
+                    String(len) +
+                    ".".repeat(dots),
+            });
+        }
     }
+
+    const INF = 1e9;
+
+    const dp =
+        new Array(tick + 1).fill(INF);
+
+    const prev =
+        new Array(tick + 1).fill(-1);
+
+    const prevUnit =
+        new Array(tick + 1).fill(-1);
+
+    dp[0] = 0;
+
+    for (let i = 0; i <= tick; i++) {
+        if (dp[i] === INF) {
+            continue;
+        }
+
+        units.forEach(
+            (unit, idx) => {
+                const next =
+                    i + unit.duration;
+
+                if (next > tick) {
+                    return;
+                }
+
+                const cost =
+                    dp[i] +
+                    unit.text.length +
+                    1;
+
+                if (
+                    cost <
+                    dp[next]
+                ) {
+                    dp[next] =
+                        cost;
+
+                    prev[next] = i;
+
+                    prevUnit[next] =
+                        idx;
+                }
+            }
+        );
+    }
+
+    if (dp[tick] === INF) {
+        return ["4"];
+    }
+
+    const result: string[] =
+        [];
+
+    let cur = tick;
+
+    while (cur > 0) {
+        const idx =
+            prevUnit[cur];
+
+        result.push(
+            units[idx].text
+        );
+
+        cur = prev[cur];
+    }
+
+    result.reverse();
+
+    durationCache.set(
+        tick,
+        result
+    );
 
     return result;
 }
 
-function restMML(tick: number): string {
+function restMML(
+    tick: number
+): string {
     return getDurationMMLParts(tick)
-        .map((duration) => "R" + duration)
+        .map(
+            (duration) =>
+                "R" + duration
+        )
         .join("");
 }
-
